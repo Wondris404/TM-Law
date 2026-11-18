@@ -1,0 +1,18 @@
+{
+  "version_id": "demo-2022",
+  "title": "FIKTÍVNY PREDPIS · evidencia dielne",
+  "kind": "predpis",
+  "law_number": 9999,
+  "law_year": 2099,
+  "authority": "Fiktívny vydávajúci orgán",
+  "acquired_on": "2026-11-18",
+  "effective_from": "2022-01-01",
+  "effective_until": "2024-01-01",
+  "fictional": true,
+  "provenance": "Syntetická testovacia pomôcka bez účinkov v skutočnom práve.",
+  "reuse_terms": "Projektová licencia MIT",
+  "passages": [
+    {"source_id": "p7-1", "section": "7", "paragraph": "1", "text": "Evidencia dielne sa uchováva dva roky."},
+    {"source_id": "p7-2", "section": "7", "paragraph": "2", "text": "Preberací protokol označuje deň prevzatia a identifikátor súčiastky."}
+  ]
+}
