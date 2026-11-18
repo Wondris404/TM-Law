@@ -45,4 +45,4 @@ V nastaveniach môžete zvoliť režim uvažovania Ollamy a voliteľne merať pa
 
 MVP podporuje TXT, PDF s textovou vrstvou a DOCX. Históriu si prehliadač pamätá lokálne, pričom každá otázka sa posudzuje samostatne. Dôverné údaje a odpovede sa ukladajú bez aplikačného šifrovania. Zdrojová karta overuje identitu použitého úseku, právnu použiteľnosť a úplnosť zdrojov musí posúdiť právnik.
 
-[Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Tréning](docs/TRAINING.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md) · [Poznámky k v0.1.1](docs/RELEASE_0.1.1.md)
+[Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Merania v0.1.2](docs/PERFORMANCE_v0.1.2.md) · [Tréning](docs/TRAINING.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md) · [Poznámky k v0.1.1](docs/RELEASE_0.1.1.md)

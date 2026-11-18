@@ -117,13 +117,15 @@ async def run_case(store, runtime, task, options, repeat, include_answers=False)
 
 def describe(rows):
     def statistic(key, operation):
-        values = [row[key] for row in rows if row.get(key) is not None]
+        values = [row[key] for row in rows if row["status"] == "done" and row.get(key) is not None]
         return operation(values) if values else None
 
     memory = [row["memory"] for row in rows if row.get("memory")]
     processes = [process for sample in memory for process in sample["processes"]]
     return {
         "median_seconds": statistic("seconds", median),
+        "min_seconds": statistic("seconds", min),
+        "max_seconds": statistic("seconds", max),
         "median_load_seconds": statistic("ollama_load_seconds", median),
         "median_first_token_seconds": statistic("first_token_seconds", median),
         "median_tokens_per_second": statistic("tokens_per_second", median),
