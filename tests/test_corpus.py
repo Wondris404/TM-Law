@@ -4,7 +4,10 @@ import sqlite3
 from datetime import date
 
 import pytest
+from fastapi.testclient import TestClient
+from tm_law.api import create_app
 from tm_law.corpus import coverage, draft_sections, load_package, original_text
+from tm_law.runtime import MockRuntime
 from tm_law.schemas import LegalVersion
 from tm_law.store import SCHEMA, SCHEMA_VERSION, Store
 
@@ -53,6 +56,20 @@ def test_archive_package_date_filter_and_coverage(tmp_path):
     hits = store.search("9999/2099 Čl. 1 ods. 1", as_of=date(2024, 12, 31))
     assert [hit["text"] for hit in hits] == ["Ilustračné pravidlo pre test."]
     assert hits[0]["norm_status"] == "transitional"
+    with TestClient(
+        create_app(store.directory, MockRuntime()), base_url="http://127.0.0.1"
+    ) as client:
+        result = client.post(
+            "/api/chat",
+            json={
+                "question": "Aké pravidlo sa tu použije?",
+                "query": "9999/2099 Čl. 1 ods. 1",
+                "as_of": "2024-12-31",
+            },
+        )
+    final = json.loads(result.text.splitlines()[-1])
+    assert final["type"] == "done"
+    assert any("prechodné ustanovenie" in note for note in final["notes"])
     assert not store.search("9999/2099 Čl. 1", as_of=date(2025, 1, 1))
     assert store.get_legal_original(version.original_sha256) == TEXT.encode()
     summary = coverage(store)

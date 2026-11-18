@@ -126,15 +126,18 @@ def load_package(path: Path) -> tuple[LegalVersion, tuple[str, bytes]]:
     ):
         raise ValueError("Rozhodnutie vyžaduje spisovú značku, dátum, typ a stav publikovania.")
     raw = read_limited(source_file, MAX_UPLOAD)
-    digest = hashlib.sha256(raw).hexdigest()
-    if digest != version.original_sha256:
-        raise ValueError("SHA-256 originálu sa nezhoduje s manifestom.")
     suffix = source_file.suffix.lower()
+    validate_original(version, suffix, raw)
+    return version, (suffix, raw)
+
+
+def validate_original(version: LegalVersion, suffix: str, raw: bytes) -> None:
+    if hashlib.sha256(raw).hexdigest() != version.original_sha256:
+        raise ValueError("SHA-256 originálu sa nezhoduje s manifestom.")
     visible = normalized(original_text(raw, suffix))
     for passage in version.passages:
         if normalized(passage.text) not in visible:
             raise ValueError(f"Úsek {passage.source_id} sa nenašiel v origináli.")
-    return version, (suffix, raw)
 
 
 def draft_sections(text: str) -> list[dict]:

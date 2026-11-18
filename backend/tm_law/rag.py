@@ -185,6 +185,11 @@ async def _answer(
             if as_of
             else "Podklady obsahujú odlišné znenia toho istého úseku. Zadajte rozhodujúci dátum."
         )
+    if any(source["norm_status"] == "transitional" for source in used_sources):
+        notes.append(
+            "Podklady zahŕňajú prechodné ustanovenie. Jeho použitie treba posúdiť podľa "
+            "skutkových okolností a časovej pôsobnosti, aj keď znenie pokrýva rozhodujúci dátum."
+        )
     if not used_sources:
         notes.append("Bez právneho podkladu môže odpoveď slúžiť len na ďalšie skúmanie.")
     evidence_status = (
