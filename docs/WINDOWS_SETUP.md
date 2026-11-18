@@ -1,5 +1,7 @@
 # Prvé spustenie na Windows 11
 
+Pred meraním výkonu použite [lokálny inventár hardvéru a stavu Ollamy](LOCAL_HARDWARE_BENCHMARK.md).
+
 Nainštalujte [Git](https://git-scm.com/install/windows), [Python 3.12 alebo novší](https://www.python.org/downloads/windows/), [Node.js 24](https://nodejs.org/en/download) a [uv](https://docs.astral.sh/uv/getting-started/installation/). Pre skutočnú inferenciu použite [OllamaSetup.exe](https://ollama.com/download/windows). Ollama podporuje bežnú inštaláciu do profilu používateľa podľa [návodu pre Windows](https://docs.ollama.com/windows).
 
 Ak máte Windows Package Manager, oficiálny návod uv uvádza tento príkaz:
