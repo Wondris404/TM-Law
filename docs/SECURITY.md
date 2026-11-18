@@ -7,3 +7,5 @@ Nahraté súbory sa pred spracovaním kontrolujú podľa veľkosti a podporovan�
 Dokumentový index, história prehliadača a odpovede sú **bez aplikačného šifrovania**. Odstránenie dokumentu vymaže záznam z aplikačného zoznamu, ale nezaručuje vymazanie uložených odpovedí, záloh, dočasných súborov alebo zvyškov na disku. História zobrazená v chate sa maže samostatne. Pred prácou s advokátskym spisom overte ochranu zariadenia, prístup k profilu prehliadača a režim zálohovania.
 
 Pre kancelárske nasadenie treba zaviesť riadenie prístupu a životného cyklu dokumentov, šifrovanie a správu kľúčov, zdokumentované vymazávanie a kontrolu záloh. Dodržiavanie GDPR a advokátskej mlčanlivosti závisí od procesov kancelárie a od spôsobu nasadenia. Testy MVP túto zhodu nepotvrdzujú.
+
+Odstránenie súkromného dokumentu používa režim SQLite `secure_delete` pre aktívnu databázu. Prehliadač, pracovný adresár, diskové snímky, zálohy a samotné úložisko môžu uchovať kópie. K úplnému vymazaniu ani k šifrovaniu sa toto nastavenie nevzťahuje. Import zložiek právneho korpusu je offline a XML/HTML sa spracúva ako text bez externého načítania.

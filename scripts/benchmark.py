@@ -8,52 +8,18 @@ import sqlite3
 import sys
 import tempfile
 from contextlib import closing
-from datetime import date
 from pathlib import Path
 from statistics import median
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
+from backend.tm_law.evaluation import benchmark_cases, deterministic_checks
 from backend.tm_law.rag import answer
 from backend.tm_law.runtime import MockRuntime, Ollama
-from backend.tm_law.schemas import ChatInput, LegalVersion, RuntimeOptions, StrictModel
+from backend.tm_law.schemas import ChatInput, LegalVersion, RuntimeOptions
 from backend.tm_law.store import SCHEMA_VERSION, Store
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-class BenchmarkCase(StrictModel):
-    id: str = Field(min_length=1)
-    category: str = Field(min_length=1)
-    question: str = Field(min_length=3, max_length=4000)
-    query: str | None = Field(default=None, min_length=1, max_length=400)
-    as_of: date | None = None
-    expected_sources: list[str]
-    reference_answer: str | None = None
-    criteria: list[str] = Field(default_factory=list)
-    expert_verified: bool = False
-    fictional: bool = False
-
-
-def read_cases(data: bytes):
-    result = []
-    ids = set()
-    for index, line in enumerate(data.decode("utf-8-sig").split("\n"), start=1):
-        if not line.strip():
-            continue
-        try:
-            task = BenchmarkCase.model_validate_json(line)
-        except ValidationError as exc:
-            paths = ", ".join(
-                ".".join(map(str, issue["loc"])) or "JSON"
-                for issue in exc.errors(include_input=False)
-            )
-            raise ValueError(f"Neplatná úloha na riadku {index} ({paths}).") from exc
-        if task.id in ids:
-            raise ValueError(f"Duplicitné ID úlohy na riadku {index}.")
-        ids.add(task.id)
-        result.append(task)
-    return result
 
 
 def snapshot_corpus(store: Store, source_dir: Path | None, simulated: bool) -> str:
@@ -120,7 +86,12 @@ async def run_case(store, runtime, task, options, repeat, include_answers=False)
         **base,
         "status": "done",
         "response_completeness": completeness,
-        **({"answer": result["answer"]} if include_answers else {}),
+        **(
+            {"answer": result["answer"], "sources_for_review": result["citations"]}
+            if include_answers
+            else {}
+        ),
+        "deterministic_checks": deterministic_checks(task, result),
         "cited_ids": result["cited_ids"],
         "verified_ids": result["verified_ids"],
         "retrieved_ids": result["retrieved_ids"],
@@ -246,7 +217,7 @@ async def main(argv=None):
                     work.append(options)
         path = args.cases or ROOT / "benchmarks" / ("smoke.jsonl" if simulated else "runtime.jsonl")
         case_bytes = path.read_bytes()
-        selected = [task for task in read_cases(case_bytes) if simulated or not task.fictional]
+        selected = [task for task in benchmark_cases(case_bytes) if simulated or not task.fictional]
     except (OSError, ValueError) as exc:
         parser.error(
             str(exc) if not isinstance(exc, ValidationError) else "Invalid model or settings."

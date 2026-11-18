@@ -107,6 +107,11 @@ class Store:
                     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                 elif version != SCHEMA_VERSION:
                     raise RuntimeError(f"Unsupported database schema version {version}")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS legal_version_original ("
+                    "version_id TEXT PRIMARY KEY REFERENCES legal_version(version_id), "
+                    "sha256 TEXT NOT NULL REFERENCES legal_original(sha256))"
+                )
         with closing(self.connect(self.private)) as conn:
             conn.executescript(PRIVATE_SCHEMA)
 
@@ -142,6 +147,8 @@ class Store:
             if current:
                 if current[0] != digest:
                     raise ValueError("Toto ID znenia už označuje iný obsah.")
+                if original:
+                    self.link_original(conn, version)
                 return digest, False
             conn.execute(
                 "INSERT INTO legal_version VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -177,13 +184,23 @@ class Store:
                     "INSERT INTO passage_fts(rowid, title, text) VALUES (?, ?, ?)",
                     (cursor.lastrowid, version.title, p.text),
                 )
+            if original:
+                self.link_original(conn, version)
         return digest, True
+
+    @staticmethod
+    def link_original(conn, version: LegalVersion):
+        conn.execute(
+            "INSERT OR IGNORE INTO legal_version_original VALUES (?, ?)",
+            (version.version_id, version.original_sha256),
+        )
 
     def search(
         self,
         query: str,
         *,
         kind=None,
+        case_number: str | None = None,
         as_of: date | None = None,
         limit=10,
         include_fictional=True,
@@ -207,7 +224,7 @@ class Store:
             alias = LEGAL_WORDS.get(folded)
             if alias and alias not in words:
                 words.append(alias)
-        if not (law or section or words or kind or as_of):
+        if not (law or section or words or kind or case_number or as_of):
             return []
         filters, params = [], []
         join = ""
@@ -232,6 +249,12 @@ class Store:
         if kind:
             filters.append("v.kind=?")
             params.append(kind)
+        if case_number:
+            filters.append(
+                "v.kind='rozhodnutie' AND replace(json_extract(v.metadata, '$.case_number'), ' ', '') "
+                "= replace(?, ' ', '') COLLATE NOCASE"
+            )
+            params.append(case_number.strip())
         if not include_fictional:
             filters.append("json_extract(v.metadata, '$.fictional')=0")
         if as_of:
@@ -244,7 +267,9 @@ class Store:
         where = " AND ".join(filters) or "1"
         with closing(self.connect(self.legal)) as conn:
             rows = conn.execute(
-                f"SELECT p.*, v.metadata, v.content_sha256 FROM passage p "
+                f"SELECT p.*, v.metadata, v.content_sha256, "
+                "EXISTS(SELECT 1 FROM legal_version_original o WHERE o.version_id=v.version_id) "
+                "AS original_archived FROM passage p "
                 f"JOIN legal_version v USING(version_id) {join} "
                 f"WHERE {where} ORDER BY {order} LIMIT ?",
                 [*params, limit],
@@ -252,7 +277,12 @@ class Store:
         if not rows and words and (law or section):
             citations = " ".join(part[0] for part in (law, section, paragraph, letter) if part)
             return self.search(
-                citations, kind=kind, as_of=as_of, limit=limit, include_fictional=include_fictional
+                citations,
+                kind=kind,
+                case_number=case_number,
+                as_of=as_of,
+                limit=limit,
+                include_fictional=include_fictional,
             )
         return [
             {
@@ -270,6 +300,7 @@ class Store:
                     )
                 },
                 "citation_id": f"{row['version_id']}/{row['source_id']}",
+                "original_archived": bool(row["original_archived"]),
             }
             for row in rows
         ]

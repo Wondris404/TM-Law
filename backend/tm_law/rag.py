@@ -142,6 +142,8 @@ async def _answer(
         )
     else:
         notes.append("Bez rozhodujúceho dátumu môže vyhľadávanie zahŕňať viaceré znenia.")
+    if any(not source["fictional"] and not source["original_archived"] for source in sources):
+        notes.append("Časť zdrojov má iba importované metadáta. Overte pôvodný dokument.")
     if any(source["fictional"] for source in sources):
         notes.append("Výsledky zahŕňajú výslovne fiktívne testovacie zdroje.")
 

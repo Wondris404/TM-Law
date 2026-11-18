@@ -169,7 +169,7 @@ def coverage(store: Store) -> dict:
         rows = conn.execute(
             """SELECT v.metadata, o.sha256 AS archived, count(p.id) AS passages
                FROM legal_version v JOIN passage p USING(version_id)
-               LEFT JOIN legal_original o ON o.sha256=json_extract(v.metadata,'$.original_sha256')
+               LEFT JOIN legal_version_original o USING(version_id)
                GROUP BY v.version_id ORDER BY v.kind, v.law_year, v.law_number, v.version_id"""
         ).fetchall()
     result = []

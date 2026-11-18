@@ -137,3 +137,26 @@ def test_legacy_schema_upgrade_preserves_content_hash(tmp_path):
     assert len(store.search("9999/2099 Čl. 1")) == 2
     with sqlite3.connect(store.legal) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_case_number_and_decision_date(tmp_path):
+    path, package = write_package(tmp_path)
+    package["version"].update(
+        kind="rozhodnutie",
+        law_year=None,
+        law_number=None,
+        case_number="3 Test 1/2024",
+        decision_type="Fiktívny rozsudok",
+        decision_date="2024-10-01",
+        publication_status="anonymized",
+        cited_legislation=["Fiktívne pravidlo"],
+    )
+    path.write_text(json.dumps(package, ensure_ascii=False), encoding="utf-8")
+    version, original = load_package(path)
+    store = Store(tmp_path / "data")
+    store.initialize()
+    store.import_version(version, original)
+    assert not store.search("", case_number="3 Test 1/2024", as_of=date(2024, 9, 30))
+    hits = store.search("", case_number="3 test1/2024", as_of=date(2024, 10, 1))
+    assert len(hits) == 2 and hits[0]["original_archived"]
+    assert hits[0]["publication_status"] == "anonymized"

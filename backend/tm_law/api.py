@@ -109,10 +109,11 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
     def search(
         q: Annotated[str, Query(max_length=400)] = "",
         kind: Kind | None = None,
+        case_number: Annotated[str, Query(min_length=1, max_length=240)] | None = None,
         as_of: date | None = None,
         limit: Annotated[int, Query(ge=1, le=50)] = 15,
     ):
-        hits = store.search(q, kind=kind, as_of=as_of, limit=limit)
+        hits = store.search(q, kind=kind, case_number=case_number, as_of=as_of, limit=limit)
         note = None
         if as_of:
             note = (

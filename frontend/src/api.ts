@@ -15,6 +15,7 @@ export type Source = {
   decision_date: string | null
   norm_status?: 'in_force' | 'repealed' | 'transitional' | 'unknown' | null
   original_sha256?: string | null
+  original_archived?: boolean
   fictional: boolean
   version_id: string
   source_url: string | null

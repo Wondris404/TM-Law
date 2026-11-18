@@ -68,6 +68,8 @@ function SourceCard({ source, number }: { source: Source; number?: number }) {
     ].filter(Boolean).join(' · ')}</p>
     <p className="excerpt">{source.text}</p>
     <small>{source.authority} · {interval}</small>
+    {!source.fictional && <small>{source.original_archived
+      ? 'Originál uložený lokálne' : 'Pôvodný dokument treba overiť'}</small>}
     <small><code>{source.citation_id}</code></small>
     {source.source_url && <a href={source.source_url} target="_blank" rel="noopener noreferrer">Otvoriť pôvodný zdroj ↗</a>}
   </article>
@@ -131,6 +133,7 @@ function App() {
   const [query, setQuery] = useState('')
   const [searchDate, setSearchDate] = useState('')
   const [kind, setKind] = useState('')
+  const [caseNumber, setCaseNumber] = useState('')
   const [hits, setHits] = useState<Source[] | null>(null)
   const [searchNote, setSearchNote] = useState('')
   const [searchError, setSearchError] = useState('')
@@ -225,6 +228,7 @@ function App() {
     const params = new URLSearchParams({ q: query })
     if (searchDate) params.set('as_of', searchDate)
     if (kind) params.set('kind', kind)
+    if (kind === 'rozhodnutie' && caseNumber.trim()) params.set('case_number', caseNumber.trim())
     setSearchError('')
     setSearchNote('')
     setHits(null)
@@ -380,6 +384,8 @@ function App() {
             <Field label="Typ zdroja"><select value={kind} onChange={(event) => setKind(event.target.value)}>
               <option value="">Všetky typy</option><option>predpis</option><option>rozhodnutie</option><option value="eu">Právo EÚ</option><option>iný</option>
             </select></Field>
+            {kind === 'rozhodnutie' && <Field label="Spisová značka"><input value={caseNumber}
+              maxLength={240} onChange={(event) => setCaseNumber(event.target.value)} /></Field>}
             <Field label="Rozhodujúci dátum"><input type="date" value={searchDate} onChange={(event) => setSearchDate(event.target.value)} /></Field>
             <button className="primary">Vyhľadať</button>
           </div>

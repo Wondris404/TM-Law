@@ -46,3 +46,22 @@ Snímky sa zbierajú každých 0,5 sekundy počas voliteľného merania. Krátke
 | Qwen3.5 4B | off / on, podľa podpory | Zmerať na Lenovo | Zmerať | Zmerať |
 | Qwen3.5 9B | off / on, podľa podpory | Zmerať na Lenovo | Zmerať | Zmerať |
 | Qwen3.5 RANA 9B | off / on, podľa podpory | Zmerať na Lenovo | Zmerať | Zmerať |
+
+## Slovenská sada a nezávislé hodnotenie
+
+[Štartovacia sada](../benchmarks/slovak-starter.jsonl) obsahuje **13 syntetických scenárov**. Tri používajú fiktívnu právnu zbierku. Zvyšných desať skúša prácu s chýbajúcimi podkladmi, faktami a slovenskou terminológiou. Právne normy ani odborné hodnotenie sa im nepripisujú. Cieľ 200 overených položiek vyžaduje dostupné reálne zdroje a odborných hodnotiteľov.
+
+```powershell
+uv run --locked python -m scripts.benchmark --cases benchmarks/slovak-starter.jsonl --summary
+```
+
+Voliteľné polia sú `difficulty`, `scenario_type`, `provenance`, `source_groups`, `required_characteristics`, `forbidden_sources` a `expected_evidence`. `fictional` označuje fiktívne právne materiály, ktoré sa nepoužijú pri reálnej inferencii. Syntetický skutkový scenár môže mať aj pravé právne zdroje. Pri autentických referenciách doplňte konkrétny dátum, identifikátory, pôvod a vyžadovanú odpoveď. Skutočné odborné overenie označte až po zhodnotení referencie odborníkom.
+
+`deterministic_checks` kontroluje záchyt očakávaných úsekov, povolené a zakázané ID, historické znenie a stav podkladov. Na spracovanie odborných hodnotení použite report so schválenými dátami a s voľbou `--include-answers`:
+
+```powershell
+uv run --locked python -m scripts.legal_review prepare --cases overene.jsonl --report .tm-law/modely.json --sheet .tm-law/posudky.json --key .tm-law/kluc.json
+uv run --locked python -m scripts.legal_review aggregate --key .tm-law/kluc.json --judgments .tm-law/vyplnene.json --output .tm-law/zhodnotenie.json
+```
+
+Hodnotiteľ dostane hárok bez názvov modelov. Vráti pole JSON objektov s `review_id` a posudkom `legal_correctness`, `citation_support`, `completeness` v hodnotách `yes`, `partial`, `no` alebo `null`. Polia `unsupported_claims` a `unnecessary_refusal` sú `true`, `false` alebo `null`. Kľúč držte oddelene od hárka. Zhrnutie vykazuje iba skutočne posúdené položky. Automatická kontrola identifikátorov nepriraďuje modelu právne skóre.
