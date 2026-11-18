@@ -78,3 +78,15 @@ uv run --locked python -m scripts.benchmark --model qwen3.5:4b --cases overene.j
 Výstup auditu je objekt JSON s označením `source_audit`. Obsahuje identifikátory úloh, referencií a výsledky kontrol. Otázky ani text pasáží nezapisuje. Pri zlyhaní je návratový kód 2 a režim `--require-source-audit` nevykoná žiadnu inferenciu. Úspech vyžaduje aspoň jednu úlohu s overenými referenciami a žiadnu neúspešnú referenčnú úlohu. Fiktívne úlohy a prípady bez očakávaného zdroja sa vykazujú samostatne. Pri úspešnom behu modelu je audit súčasťou bežného JSON reportu.
 
 Audit overuje integritu archivovaných údajov a súlad dátumov s uloženými metadátami. Pôvod záznamu, právny význam prechodných ustanovení a správnosť záveru posudzuje človek.
+
+## Zákon o rodine
+
+[Sada s deviatimi úlohami](../benchmarks/slovak-family-law.jsonl) má fiktívne skutkové zadania, skutočné archivované právne referencie v ôsmich úlohách a jednu negatívnu kontrolu mimo dátumového pokrytia. Pri zmene § 6 ods. 1 a § 91 ods. 2 testuje posledný deň staršieho a prvý deň novšieho znenia. Zahŕňa aj prípad s prechodným ustanovením. Žiadna úloha zatiaľ nemá odborný posudok.
+
+Po [offline importe](LEGAL_CORPUS_STATUS.md) overte odkazy bez spustenia modelu:
+
+```powershell
+uv run --locked --offline python -m scripts.benchmark --audit-only --cases benchmarks/slovak-family-law.jsonl --data-dir .tm-law/slovlex --output .tm-law/family-law-source-audit.json
+```
+
+Pri príprave tréningových dát pridajte aj `--holdout benchmarks/slovak-family-law.jsonl`. Na súvisiacich tréningových príkladoch používajte rovnakú skupinu `sk-zz-2005-36`, aby sa príbuzné znenia nedostali do tréningu s touto vyhradenou sadou. Inferenciu a odborné hodnotenie vykonajte samostatne.

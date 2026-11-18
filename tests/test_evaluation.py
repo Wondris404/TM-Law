@@ -29,6 +29,20 @@ def test_starter_dataset_and_historical_citation_trap():
     assert not checks["historical_ids_match"]
 
 
+def test_family_law_benchmark_separates_scenarios_and_source_provenance():
+    cases = benchmark_cases((ROOT / "benchmarks/slovak-family-law.jsonl").read_bytes())
+    assert len(cases) == 9
+    assert {case.difficulty for case in cases} == {"basic", "intermediate", "advanced"}
+    assert sum(bool(case.expected_sources) for case in cases) == 8
+    assert all(case.scenario_type == "synthetic" and not case.fictional for case in cases)
+    assert all(not case.expert_verified for case in cases)
+    assert all(case.source_groups == ["sk-zz-2005-36"] and case.as_of for case in cases)
+    before = next(case for case in cases if case.id == "rodina-otcovstvo-posledny-den")
+    after = next(case for case in cases if case.id == "rodina-otcovstvo-prvy-den")
+    assert before.expected_sources == after.forbidden_sources
+    assert after.expected_sources == before.forbidden_sources
+
+
 def test_blind_sheet_and_assessed_denominators():
     item = BenchmarkCase(
         id="case", category="example", question="Over príklad", expected_sources=[]
