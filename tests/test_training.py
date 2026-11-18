@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -5,7 +6,7 @@ import pytest
 
 from scripts.train_lora import base_weights, preflight
 from training.config import TrainingConfig
-from training.dataset import prepare, prepared_splits, read_examples
+from training.dataset import TeacherProvenance, prepare, prepared_splits, read_examples
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -105,3 +106,23 @@ def test_preflight_checks_model_files_without_loading_weights(tmp_path):
     assert result["weight_file_sizes_bytes"] == {shard: 11}
     assert result["splits"] == {"train": 8, "validation": 1, "test": 1}
     assert not output.exists()
+
+
+def test_distillation_checks_response_digest_and_records_teacher(tmp_path):
+    raw = (ROOT / "data/training-smoke.jsonl").read_bytes()
+    holdout = (ROOT / "benchmarks/slovak-starter.jsonl").read_bytes()
+    teacher = TeacherProvenance(
+        model="synthetic teacher fixture",
+        revision="smoke-only",
+        model_sha256="a" * 64,
+        responses_sha256=hashlib.sha256(raw).hexdigest(),
+        reuse_terms="MIT",
+        approved_for_training=True,
+    )
+    output = tmp_path / "prepared"
+    with pytest.raises(ValueError, match="declared SHA-256"):
+        prepare(raw + b"\n", [holdout], output, 42, teacher=teacher)
+    assert not output.exists()
+    result = prepare(raw, [holdout], output, 42, teacher=teacher)
+    assert result["teacher"] == teacher.model_dump()
+    assert prepared_splits(output)[0] == result

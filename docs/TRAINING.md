@@ -46,3 +46,15 @@ uv run --locked python -m scripts.compare_model_runs --baseline .tm-law/base.jso
 ```
 
 Prvý návrh kompresie je porovnať menší študentský model a viac kvantizácií na rovnakom CPU. Pri odstránení multimodálnych váh overte kompatibilitu textového formátu a skutočnú rezidentnú pamäť. Pri pruningu alebo destilácii sledujte aj zachovanie slovenčiny, češtiny, logiky a práce s dôkazmi. Cielené unlearning experimenty robte na kópii a oddeľte zabudnutie od zachovania schopností. Zmena správania sama nezmenšuje počet parametrov ani pamäť. Tieto experimenty zatiaľ nemajú merania na cieľových modeloch. [Výskumný plán](RESEARCH.md)
+
+## Destilácia z odpovedí učiteľa
+
+Pre offline destiláciu pripravte kandidátske dvojice otázka–odpoveď z osobitnej licencovanej sady. Výstupy učiteľa musia prejsť obsahovou kontrolou. Vynechajte benchmarkové otázky, modelové výstupy z benchmarkov a všetky klientské dokumenty. Rovnaký formát `TrainingExample` eviduje povolenie na tréning a pôvod na úrovni riadka.
+
+Vedľa JSONL pripravte manifest s poliami `model`, `revision`, `model_sha256`, `responses_sha256`, `reuse_terms` a `approved_for_training: true`. `model_sha256` je externý zaznamenaný identifikátor konkrétnych váh učiteľa. Import kontroluje `responses_sha256` proti presným bajtom JSONL a uloží pôvod do pripravenej sady. Obe štandardné benchmarkové sady musia zostať vyhradené.
+
+```powershell
+uv run --locked --offline python -m scripts.prepare_training --input teacher-approved.jsonl --teacher-manifest teacher.json --holdout benchmarks/slovak-starter.jsonl --holdout benchmarks/slovak-family-law.jsonl --output .tm-law/distillation
+```
+
+Ako `data_directory` pre študenta použite výstup tohto príkazu. Tréning LoRA alebo QLoRA potom používa schválené odpovede ako ciele. Ide o destiláciu z textových odpovedí. Skript nepoužíva logity učiteľa, nevykonáva inferenciu a nehodnotí právnu správnosť.

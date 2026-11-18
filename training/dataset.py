@@ -14,6 +14,16 @@ from backend.tm_law.schemas import Key, Short, StrictModel
 SPLITS = ("train", "validation", "test")
 SLOVLEX_VERSION = re.compile(r"(sk-zz-[0-9]{4}-[0-9]+)-[0-9]{8}")
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=8000)]
+Sha256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+
+
+class TeacherProvenance(StrictModel):
+    model: Short
+    revision: Short
+    model_sha256: Sha256
+    responses_sha256: Sha256
+    reuse_terms: Short
+    approved_for_training: Literal[True]
 
 
 class TrainingExample(StrictModel):
@@ -86,7 +96,17 @@ def write_split(rows: list[TrainingExample]) -> bytes:
     return "".join(row.model_dump_json() + "\n" for row in rows).encode("utf-8")
 
 
-def prepare(raw: bytes, holdouts: list[bytes], output: Path, seed: int) -> dict:
+def prepare(
+    raw: bytes,
+    holdouts: list[bytes],
+    output: Path,
+    seed: int,
+    *,
+    teacher: TeacherProvenance | None = None,
+) -> dict:
+    input_digest = hashlib.sha256(raw).hexdigest()
+    if teacher is not None and teacher.responses_sha256 != input_digest:
+        raise ValueError("Teacher response file does not match its declared SHA-256.")
     held_questions, held_sources = holdout_keys(holdouts)
     examples = read_examples(raw)
     groups = {}
@@ -133,7 +153,7 @@ def prepare(raw: bytes, holdouts: list[bytes], output: Path, seed: int) -> dict:
     manifest = {
         "schema": 1,
         "seed": seed,
-        "input_sha256": hashlib.sha256(raw).hexdigest(),
+        "input_sha256": input_digest,
         "holdout_sha256": [hashlib.sha256(item).hexdigest() for item in holdouts],
         "excluded_holdout_rows": contamination,
         "deduplicated_rows": duplicates,
@@ -146,6 +166,8 @@ def prepare(raw: bytes, holdouts: list[bytes], output: Path, seed: int) -> dict:
             for label in SPLITS
         },
     }
+    if teacher is not None:
+        manifest["teacher"] = teacher.model_dump(mode="json")
     output.mkdir(parents=True, exist_ok=False)
     for label, payload in payloads.items():
         (output / f"{label}.jsonl").write_bytes(payload)
@@ -157,6 +179,10 @@ def prepared_splits(directory: Path) -> tuple[dict, dict[str, list[TrainingExamp
     manifest = json.loads((directory / "manifest.json").read_bytes())
     if manifest["schema"] != 1 or not manifest["holdout_sha256"]:
         raise ValueError("Unrecognized dataset manifest or missing holdout.")
+    if "teacher" in manifest:
+        teacher = TeacherProvenance.model_validate(manifest["teacher"])
+        if teacher.responses_sha256 != manifest["input_sha256"]:
+            raise ValueError("Teacher response digest does not match the prepared input.")
     splits = {}
     seen = set()
     for label in SPLITS:
