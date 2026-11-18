@@ -4,10 +4,10 @@ Projekt trénuje adaptér nad používateľom dodaným lokálnym základom. `TM-
 
 ## Dáta
 
-Každý JSONL záznam potrebuje `id`, spoločnú `group` pre súvisiace prípady, `task`, `prompt`, `answer`, `provenance`, `license`, `origin`, `contains_personal_data: false` a `reusable_for_training: true`. K právnym materiálom pridajte `source_groups` pre rodiny znení a `source_ids` pre presnejšie odkazy. Rovnaké označenia rodín zachovajte v tréningových dátach aj v benchmarke. Deklarácie o právach a anonymizácii musí skontrolovať človek.
+Každý JSONL záznam potrebuje `id`, spoločnú `group` pre súvisiace prípady, `task`, `prompt`, `answer`, `provenance`, `license`, `origin`, `contains_personal_data: false` a `reusable_for_training: true`. K právnym materiálom pridajte `source_groups` pre rodiny znení a `source_ids` pre presnejšie odkazy. Rovnaké označenia rodín zachovajte v tréningových dátach aj v benchmarke. Pre lokálne identifikátory Slov-Lexu odvádza príprava rodinu predpisu aj z ID jeho časového znenia. Deklarácie o právach a anonymizácii musí skontrolovať človek.
 
 ```powershell
-uv run --locked python -m scripts.prepare_training --input data/training-smoke.jsonl --holdout benchmarks/slovak-starter.jsonl --output .tm-law/train-smoke
+uv run --locked python -m scripts.prepare_training --input data/training-smoke.jsonl --holdout benchmarks/slovak-starter.jsonl --holdout benchmarks/slovak-family-law.jsonl --output .tm-law/train-smoke
 ```
 
 Príprava vylúči zhodné normalizované otázky aj spoločné rodiny zdrojov s holdoutom. Odstráni identické duplicity, odmietne konfliktné dvojice a rozdelí nezávislé skupiny deterministicky na train, validation a test. Manifest obsahuje hashe vstupu, holdoutu aj každej časti. Preparafrázované otázky môžu prejsť kontrolou. Dopĺňajte preto spoločné skupiny aj manuálnu kontrolu.
@@ -31,8 +31,9 @@ Na Linuxe je interpreter v `.tm-law/train-env/bin/python`. Skúška s osmi krokm
 
 1. Vyberte model s podmienkami povoľujúcimi adaptáciu. Pri Qwen a RANA vyhodnoťte práva konkrétnych váh a revízie samostatne. Z verejného oficiálneho zdroja si podľa jeho návodu manuálne uložte revíziu modelu, konfiguráciu, tokenizer a súbory Safetensors.
 2. Použite pripravené a právne overené dáta, pričom benchmark zostane mimo tréningu. Zadajte JSON podľa schémy [TrainingConfig](../training/config.py). Vyplňte `base_revision` úplným 40-znakovým SHA, `base_license`, cestu k lokálnemu základu, cieľové moduly a nový výstupný adresár. Pre transformer s lineárnymi `q_proj` a `v_proj` sú to kandidáti, cieľ overte v architektúre konkrétnej revízie.
-3. Pre GPU prostredie použite oficiálny PyTorch pre CUDA. Voliteľná cesta `method: "qlora"` vyžaduje kompatibilnú NVIDIA CUDA a bitsandbytes. Nezahŕňa ju štandardná inštalácia. GPU a pamäť si overte pred spustením. `method: "lora"` umožňuje CPU pri vhodne malom základe. Pri Qwen 4B/9B treba tréningové nároky zmerať mimo cieľového notebooku.
-4. Spustite `python -m scripts.train_lora --config miestna-konfiguracia.json`. Report eviduje hashe váh, seed, balíky, tréningovú stratu, testovaciu stratu pred a po a adaptér. Strata vyjadruje pravdepodobnosť správnych tokenov v dátach. Právnu použiteľnosť hodnotí oddelený benchmark a právnik.
+3. Na ľahkú kontrolu vstupov použite `python -m scripts.train_lora --config miestna-konfiguracia.json --preflight`. Skontroluje miestne súbory základného modelu a tokenizéra, index a prítomnosť shardov, integritu splitov a vyhradené benchmarkové sady. Výstup uvádza veľkosti súborov na disku. Kontrola neotvára obsah váh, neimportuje PyTorch a nespúšťa tréning. RAM, kompatibilitu vrstiev a CUDA treba overiť oddelene na schválenom počítači.
+4. Pre GPU prostredie použite oficiálny PyTorch pre CUDA. Voliteľná cesta `method: "qlora"` vyžaduje kompatibilnú NVIDIA CUDA a bitsandbytes. Nezahŕňa ju štandardná inštalácia. GPU a pamäť si overte pred spustením. `method: "lora"` umožňuje CPU pri vhodne malom základe. Pri Qwen 4B/9B treba tréningové nároky zmerať mimo cieľového notebooku.
+5. Spustite `python -m scripts.train_lora --config miestna-konfiguracia.json`. Report eviduje hashe váh, seed, balíky, tréningovú stratu, testovaciu stratu pred a po a adaptér. Strata vyjadruje pravdepodobnosť správnych tokenov v dátach. Právnu použiteľnosť hodnotí oddelený benchmark a právnik.
 
 Ak už máte kompatibilný lokálny GGUF výsledného modelu, vytvorte vedľa neho `Modelfile` s jediným riadkom `FROM ./tm-law-4b.gguf` a spustite `ollama create tm-law-4b:experimental -f Modelfile`. Pred importom skontrolujte architektúru, modelovú šablónu a licenciu. Kompatibilita konkrétneho adaptéra závisí od základu a formátu a nebola overená pre cieľové Qwen modely. [Import do Ollamy](https://docs.ollama.com/import)
 

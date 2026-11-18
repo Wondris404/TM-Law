@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -11,6 +12,7 @@ from backend.tm_law.evaluation import SourceId, benchmark_cases, question_key
 from backend.tm_law.schemas import Key, Short, StrictModel
 
 SPLITS = ("train", "validation", "test")
+SLOVLEX_VERSION = re.compile(r"(sk-zz-[0-9]{4}-[0-9]+)-[0-9]{8}")
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=8000)]
 
 
@@ -47,8 +49,37 @@ def read_examples(raw: bytes) -> list[TrainingExample]:
     return rows
 
 
+def reference_keys(source_ids: list[str]) -> set[str]:
+    versions = {source.split("/", 1)[0] for source in source_ids}
+    families = {match[1] for version in versions if (match := SLOVLEX_VERSION.fullmatch(version))}
+    return versions | families
+
+
 def source_keys(item: TrainingExample) -> set[str]:
-    return set(item.source_groups) | {source.split("/")[0] for source in item.source_ids}
+    return set(item.source_groups) | reference_keys(item.source_ids)
+
+
+def holdout_keys(holdouts: list[bytes]) -> tuple[set[str], set[str]]:
+    if not holdouts:
+        raise ValueError("Explicit benchmark holdout data is required.")
+    questions, sources = set(), set()
+    for dataset in holdouts:
+        cases = benchmark_cases(dataset)
+        if not cases:
+            raise ValueError("Benchmark holdout must contain at least one case.")
+        for case in cases:
+            questions.add(question_key(case.question))
+            sources.update(case.source_groups)
+            sources.update(reference_keys(case.expected_sources + case.forbidden_sources))
+    return questions, sources
+
+
+def overlaps_holdout(item: TrainingExample, questions: set[str], sources: set[str]) -> bool:
+    return (
+        question_key(item.prompt) in questions
+        or item.group in sources
+        or bool(source_keys(item).intersection(sources))
+    )
 
 
 def write_split(rows: list[TrainingExample]) -> bytes:
@@ -56,19 +87,7 @@ def write_split(rows: list[TrainingExample]) -> bytes:
 
 
 def prepare(raw: bytes, holdouts: list[bytes], output: Path, seed: int) -> dict:
-    if not holdouts:
-        raise ValueError("Explicit benchmark holdout data is required.")
-    held_questions, held_sources = set(), set()
-    for dataset in holdouts:
-        cases = benchmark_cases(dataset)
-        if not cases:
-            raise ValueError("Benchmark holdout must contain at least one case.")
-        for case in cases:
-            held_questions.add(question_key(case.question))
-            held_sources.update(case.source_groups)
-            held_sources.update(
-                source.split("/")[0] for source in case.expected_sources + case.forbidden_sources
-            )
+    held_questions, held_sources = holdout_keys(holdouts)
     examples = read_examples(raw)
     groups = {}
     sources_by_group = {}
@@ -77,11 +96,7 @@ def prepare(raw: bytes, holdouts: list[bytes], output: Path, seed: int) -> dict:
     for item in sorted(examples, key=lambda example: example.id):
         key = question_key(item.prompt)
         sources = source_keys(item)
-        if (
-            key in held_questions
-            or item.group in held_sources
-            or sources.intersection(held_sources)
-        ):
+        if overlaps_holdout(item, held_questions, held_sources):
             contamination += 1
             continue
         if key in prompts:

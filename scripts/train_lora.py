@@ -11,7 +11,85 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from training.config import TrainingConfig
-from training.dataset import prepared_splits
+from training.dataset import holdout_keys, overlaps_holdout, prepared_splits
+
+ROOT = Path(__file__).resolve().parents[1]
+PROJECT_HOLDOUTS = ("slovak-starter.jsonl", "slovak-family-law.jsonl")
+
+
+def base_weights(base: Path) -> list[Path]:
+    if not (base / "config.json").is_file():
+        raise ValueError("The base must contain config.json.")
+    single = base / "model.safetensors"
+    index = base / "model.safetensors.index.json"
+    if single.is_file():
+        if index.is_file():
+            raise ValueError("The base contains both a single weights file and a sharded index.")
+        return [single]
+    if index.is_file():
+        data = json.loads(index.read_bytes())
+        weight_map = data.get("weight_map") if isinstance(data, dict) else None
+        if not isinstance(weight_map, dict) or not weight_map:
+            raise ValueError("Missing weight map in the local safetensors index.")
+        if any(
+            not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_.-]+\.safetensors", name)
+            for name in weight_map.values()
+        ):
+            raise ValueError("The safetensors index must address local shard files by name.")
+        weights = [base / name for name in sorted(set(weight_map.values()))]
+        if any(not path.is_file() for path in weights):
+            raise ValueError("The base has missing local safetensors shards.")
+        return weights
+    raise ValueError("The base must contain local safetensors weights.")
+
+
+def check_dataset(config: TrainingConfig):
+    manifest, splits = prepared_splits(config.data_directory)
+    if config.smoke_only:
+        return manifest, splits
+    if any(row.origin == "synthetic" for rows in splits.values() for row in rows):
+        raise ValueError("Synthetic samples are reserved for explicit smoke runs.")
+    holdouts = [(ROOT / "benchmarks" / name).read_bytes() for name in PROJECT_HOLDOUTS]
+    missing = [
+        name
+        for name, data in zip(PROJECT_HOLDOUTS, holdouts, strict=True)
+        if hashlib.sha256(data).hexdigest() not in manifest["holdout_sha256"]
+    ]
+    if missing:
+        raise ValueError(
+            f"Prepare the dataset with current project holdouts: {', '.join(missing)}."
+        )
+    questions, sources = holdout_keys(holdouts)
+    if any(overlaps_holdout(row, questions, sources) for rows in splits.values() for row in rows):
+        raise ValueError("Prepared training data overlaps a project benchmark holdout.")
+    return manifest, splits
+
+
+def preflight(config: TrainingConfig) -> dict:
+    if config.output_directory.exists():
+        raise ValueError("Output must be a new directory for a new training run.")
+    weights = base_weights(config.base_directory)
+    if not (config.base_directory / "tokenizer_config.json").is_file():
+        raise ValueError("The local base must contain tokenizer_config.json.")
+    if not any(
+        (config.base_directory / name).is_file()
+        for name in ("tokenizer.json", "tokenizer.model", "spiece.model", "vocab.json", "vocab.txt")
+    ):
+        raise ValueError("The local base is missing tokenizer data.")
+    _, splits = check_dataset(config)
+    sizes = {path.name: path.stat().st_size for path in weights}
+    if not all(sizes.values()):
+        raise ValueError("A local safetensors weights file is empty.")
+    return {
+        "status": "inputs_checked",
+        "model": config.base_model_id,
+        "revision": config.base_revision,
+        "method": config.method,
+        "target_device": config.device,
+        "weight_file_sizes_bytes": sizes,
+        "splits": {label: len(rows) for label, rows in splits.items()},
+        "smoke_only": config.smoke_only,
+    }
 
 
 def file_sha256(path: Path) -> str:
@@ -20,12 +98,10 @@ def file_sha256(path: Path) -> str:
 
 
 def base_provenance(base: Path) -> dict[str, str]:
-    weights = sorted(base.glob("*.safetensors"))
+    weights = base_weights(base)
     configuration = sorted(
         p for p in base.iterdir() if p.is_file() and p.suffix in {".json", ".jinja"}
     )
-    if not weights or not (base / "config.json").is_file():
-        raise ValueError("The base must contain local safetensors weights and config.json.")
     return {path.name: file_sha256(path) for path in weights + configuration}
 
 
@@ -85,12 +161,7 @@ def train(config: TrainingConfig, resume_step: int | None):
         )
     set_seed(config.seed)
     torch.set_num_threads(config.cpu_threads)
-    manifest, splits = prepared_splits(config.data_directory)
-    if (
-        any(row.origin == "synthetic" for rows in splits.values() for row in rows)
-        and not config.smoke_only
-    ):
-        raise ValueError("Synthetic samples are reserved for explicit smoke runs.")
+    manifest, splits = check_dataset(config)
 
     packages = {name: version(name) for name in ("torch", "transformers", "peft", "accelerate")}
     if config.method == "qlora":
@@ -229,13 +300,17 @@ def train(config: TrainingConfig, resume_step: int | None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--resume-step", type=int)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--resume-step", type=int)
+    mode.add_argument(
+        "--preflight", action="store_true", help="Check inputs without loading models."
+    )
     args = parser.parse_args()
     if args.resume_step is not None and not re.fullmatch(r"[1-9][0-9]*", str(args.resume_step)):
         parser.error("--resume-step must name a positive checkpoint step.")
     try:
         config = TrainingConfig.model_validate_json(args.config.read_bytes())
-        result = train(config, args.resume_step)
+        result = preflight(config) if args.preflight else train(config, args.resume_step)
     except ValidationError:
         parser.error("Training configuration failed validation.")
     except (OSError, ValueError) as exc:
