@@ -8,6 +8,7 @@ Key = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,1
 PassageText = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=8000)
 ]
+Reasoning = Literal["auto", "on", "off"]
 Kind = Literal["predpis", "rozhodnutie", "eu", "iný"]
 
 
@@ -67,7 +68,10 @@ class RuntimeOptions(StrictModel):
     )
     context_window: Annotated[int, Field(ge=2048, le=32768)] = 4096
     temperature: Annotated[float, Field(ge=0, le=1)] = 0.15
-    max_tokens: Annotated[int, Field(ge=64, le=2048)] = 768
+    max_tokens: Annotated[int, Field(ge=64, le=8192)] = 768
+    reasoning: Reasoning = "auto"
+    measure_memory: bool = False
+    seed: Annotated[int, Field(ge=0, le=2147483647)] | None = None
 
 
 class ChatInput(StrictModel):

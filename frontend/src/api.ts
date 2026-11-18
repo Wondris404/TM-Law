@@ -31,16 +31,37 @@ export type Settings = {
 
 export type LocalDocument = { id: string; name: string }
 
+export type Reasoning = 'auto' | 'on' | 'off'
+
+export type Metrics = {
+  seconds: number
+  first_token_seconds: number | null
+  first_answer_token_seconds: number | null
+  generated_tokens: number | null
+  tokens_per_second: number | null
+  memory?: {
+    samples: number
+    ollama_listener_measured: boolean
+    combined_peak_pss_bytes: number | null
+    processes: { role: 'backend' | 'ollama' | 'ollama_worker'; pid: number; peak_rss_bytes: number }[]
+  }
+}
+
 export type Result = {
   type: 'done'
   answer: string
   citations: Source[]
   rejected: string[]
+  retrieved_ids?: string[]
+  verified_ids?: string[]
+  reasoning?: { requested: Reasoning; sent_to_ollama: boolean | string | null; thinking_observed: boolean }
+  metrics?: Metrics
   notes: string[]
 }
 
 export type Event = Result
-  | { type: 'start'; simulated: boolean; notes: string[] }
+  | { type: 'start'; simulated: boolean; notes: string[]; evidence_status: string }
+  | { type: 'thinking' }
   | { type: 'delta'; text: string }
   | { type: 'error'; message: string }
 

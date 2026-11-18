@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -7,8 +8,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from tm_law.api import create_app
+from tm_law.rag import answer
 from tm_law.runtime import MODEL_ERROR, Ollama, RuntimeUnavailable, loopback_url
-from tm_law.schemas import RuntimeOptions
+from tm_law.schemas import ChatInput, RuntimeOptions
+from tm_law.store import Store
 
 from .test_mvp import fixture as legal_fixture
 
@@ -149,3 +152,127 @@ async def test_ollama_over_local_http():
         finally:
             server.shutdown()
             thread.join(timeout=2)
+
+
+@pytest.mark.parametrize(
+    ("mode", "metadata", "expected"),
+    [
+        ("auto", None, None),
+        ("on", {"thinking": {"values": [False, True], "default": True}}, True),
+        ("off", {"thinking": {"values": [False, True], "default": True}}, False),
+        ("on", {"thinking": {"values": ["low", "medium", "high"], "default": "medium"}}, "medium"),
+        ("off", {"thinking": {"values": [False]}}, False),
+        ("off", {"capabilities": ["thinking"], "details": {"family": "qwen35"}}, False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_reasoning_controls(mode, metadata, expected):
+    paths = []
+
+    def handler(request):
+        paths.append(request.url.path)
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200, json={"models": [{"name": "model:latest", "digest": "hash"}]}
+            )
+        if request.url.path == "/api/show":
+            assert json.loads(request.content) == {"model": "model:latest"}
+            return httpx.Response(200, json=metadata)
+        request_body = json.loads(request.content)
+        assert request_body["model"] == "model:latest"
+        if expected is None:
+            assert "think" not in request_body
+        else:
+            assert request_body["think"] == expected
+            assert type(request_body["think"]) is type(expected)
+        return httpx.Response(200, text='{"message":{"content":"answer"},"done":true}\n')
+
+    runtime = Ollama("http://127.0.0.1", "model", httpx.MockTransport(handler))
+    chunks = [chunk async for chunk in runtime.stream([], RuntimeOptions(reasoning=mode))]
+    assert ("/api/show" in paths) == (mode != "auto")
+    assert chunks[0].model_digest == "hash" and chunks[0].applied_think == expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "metadata"),
+    [
+        ("off", {"thinking": {"values": ["low", "medium"]}}),
+        ("on", {"thinking": {"values": [False]}}),
+        ("on", {"capabilities": ["completion"]}),
+        ("off", {"capabilities": ["thinking"], "details": {"family": "gptoss"}}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_unsupported_controls_do_not_generate(mode, metadata):
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "model"}]})
+        assert request.url.path == "/api/show"
+        return httpx.Response(200, json=metadata)
+
+    runtime = Ollama("http://127.0.0.1", "model", httpx.MockTransport(handler))
+    with pytest.raises(RuntimeUnavailable, match="Vyberte Auto"):
+        _ = [item async for item in runtime.stream([], RuntimeOptions(reasoning=mode))]
+
+
+def test_thinking_is_never_published_or_validated(tmp_path):
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "model"}]})
+        lines = [
+            {"message": {"thinking": "PRIVATE [[secret/id]]"}},
+            {"message": {"content": "Číslo ß<th"}},
+            {"message": {"content": "ink>INTERNAL [[secret/inline]]</th"}},
+            {"message": {"content": "ink> odpoveď [[fake/ref]]"}},
+            {"done": True, "done_reason": "length", "eval_count": 12, "eval_duration": 600000000},
+        ]
+        return httpx.Response(200, text="\n".join(map(json.dumps, lines)) + "\n")
+
+    runtime = Ollama("http://127.0.0.1", "model", httpx.MockTransport(handler))
+    with TestClient(create_app(tmp_path, runtime), base_url="http://localhost") as client:
+        response = client.post("/api/chat", json={"question": "Test odpovede."})
+    assert "PRIVATE" not in response.text and "INTERNAL" not in response.text
+    assert "secret/" not in response.text
+    events = [json.loads(line) for line in response.iter_lines()]
+    assert events[1] == {"type": "thinking"}
+    done = events[-1]
+    assert done["answer"] == "Číslo ß odpoveď [neoverený odkaz]"
+    assert done["cited_ids"] == done["rejected"] == ["fake/ref"]
+    assert done["verified_ids"] == []
+    assert done["metrics"]["generated_tokens"] == 12
+    assert done["metrics"]["tokens_per_second"] == 20
+    assert done["metrics"]["done_reason"] == "length"
+    assert done["metrics"]["first_token_seconds"] <= done["metrics"]["first_answer_token_seconds"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_answer_closes_ollama_stream(tmp_path):
+    paused = asyncio.Event()
+    closed = asyncio.Event()
+
+    class SlowStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"message":{"thinking":"private"}}\n'
+            paused.set()
+            await asyncio.Event().wait()
+
+        async def aclose(self):
+            closed.set()
+
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "model"}]})
+        return httpx.Response(200, stream=SlowStream())
+
+    store = Store(tmp_path)
+    store.initialize()
+    runtime = Ollama("http://127.0.0.1", "model", httpx.MockTransport(handler))
+    stream = answer(store, runtime, ChatInput(question="Test cancellation"), None)
+    assert (await anext(stream))["type"] == "start"
+    assert (await anext(stream))["type"] == "thinking"
+    task = asyncio.create_task(anext(stream))
+    await asyncio.wait_for(paused.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert closed.is_set()

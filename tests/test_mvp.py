@@ -184,3 +184,20 @@ def test_invalid_upload_guard_and_rebinding(client):
         ).status_code
         == 403
     )
+
+
+def test_historical_overlap_and_insufficient_evidence(client):
+    competing = fixture(2024)
+    competing.update(version_id="overlap", effective_from="2023-01-01")
+    assert client.post("/api/legal/import", json=competing).status_code == 201
+    question = {"question": "Evidencia dielne k danému dátumu.", "query": "9999/2099 § 7 evidencia"}
+    early = client.post("/api/chat", json={**question, "as_of": "2021-01-01"})
+    no_evidence = json.loads(early.text.splitlines()[-1])
+    assert no_evidence["evidence_status"] == "insufficient"
+    assert no_evidence["retrieved_ids"] == no_evidence["verified_ids"] == []
+    response = client.post("/api/chat", json={**question, "as_of": "2023-06-01"})
+    result = json.loads(response.text.splitlines()[-1])
+    assert result["evidence_status"] == "version_conflict"
+    assert set(result["version_conflicts"][0]) == {"demo-2022/p7-1", "overlap/p7-1"}
+    assert set(result["context_ids"]) <= set(result["retrieved_ids"])
+    assert result["verified_ids"] == [result["citations"][0]["citation_id"]]

@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -20,6 +21,13 @@ class Chunk:
     text: str = ""
     eval_count: int | None = None
     eval_duration_ns: int | None = None
+    prompt_eval_count: int | None = None
+    load_duration_ns: int | None = None
+    runtime_duration_ns: int | None = None
+    done_reason: str | None = None
+    thinking: bool = False
+    model_digest: str | None = None
+    applied_think: bool | str | None = None
 
 
 class ModelRuntime(Protocol):
@@ -50,10 +58,11 @@ def loopback_url(value: str) -> str:
 class Ollama:
     simulated = False
 
-    def __init__(self, url: str, model: str, transport=None):
+    def __init__(self, url: str, model: str, transport=None, *, keep_alive: int | None = None):
         self.url = loopback_url(url)
         self.default_model = model
         self.transport = transport
+        self.keep_alive = keep_alive
 
     def client(self):
         return httpx.AsyncClient(
@@ -64,42 +73,97 @@ class Ollama:
             transport=self.transport,
         )
 
-    async def models(self) -> list[str]:
+    async def installed(self) -> dict[str, str | None]:
         try:
             async with self.client() as client:
                 response = await client.get("/api/tags")
                 response.raise_for_status()
-                return [
-                    item["name"]
+                return {
+                    item["name"]: item.get("digest")
                     for item in response.json()["models"]
                     if not item["name"].casefold().endswith((":cloud", "-cloud"))
                     and not item.get("remote_model")
                     and not item.get("remote_host")
-                ]
-        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                }
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as exc:
             raise RuntimeUnavailable("Ollama neodpovedá. Spustite lokálny server Ollama.") from exc
+
+    async def models(self) -> list[str]:
+        return list(await self.installed())
+
+    async def thinking_control(self, model: str, mode: str) -> bool | str | None:
+        if mode == "auto":
+            return None
+        try:
+            async with self.client() as client:
+                response = await client.post("/api/show", json={"model": model})
+                response.raise_for_status()
+                metadata = response.json()
+            if not isinstance(metadata, dict):
+                raise ValueError("Invalid model metadata")
+        except (httpx.HTTPError, ValueError) as exc:
+            raise RuntimeUnavailable(
+                "Ollama nevie overiť režim uvažovania. Aktualizujte ju alebo vyberte Auto."
+            ) from exc
+
+        thinking = metadata.get("thinking")
+        values = thinking.get("values") if isinstance(thinking, dict) else None
+        if isinstance(values, list):
+            if mode == "off" and any(value is False for value in values):
+                return False
+            if mode == "on":
+                if any(value is True for value in values):
+                    return True
+                named = [value for value in values if isinstance(value, str) and value]
+                if named:
+                    default = thinking.get("default")
+                    return default if default in named else named[0]
+        elif "thinking" in (metadata.get("capabilities") or []):
+            # Older versions declare the capability without describing accepted controls.
+            details = metadata.get("details") or {}
+            family = details.get("family", "") if isinstance(details, dict) else ""
+            if family in {"qwen3", "qwen3moe", "qwen35", "qwen35moe"}:
+                return mode == "on"
+            if family == "gptoss" and mode == "on":
+                return "medium"
+        raise RuntimeUnavailable(
+            "Model nepotvrdzuje podporu zvoleného režimu uvažovania. Vyberte Auto."
+        )
 
     async def stream(self, messages: list[dict], options: RuntimeOptions) -> AsyncIterator[Chunk]:
         model = options.model or self.default_model
-        installed = await self.models()
-        if model not in installed and f"{model}:latest" not in installed:
+        installed = await self.installed()
+        resolved = model if model in installed else f"{model}:latest"
+        if resolved not in installed:
             raise RuntimeUnavailable(MODEL_ERROR)
+        think = await self.thinking_control(resolved, options.reasoning)
         payload = {
-            "model": model,
+            "model": resolved,
             "messages": messages,
             "stream": True,
-            "think": False,
             "options": {
                 "num_ctx": options.context_window,
                 "temperature": options.temperature,
                 "num_predict": options.max_tokens,
             },
         }
+        if options.seed is not None:
+            payload["options"]["seed"] = options.seed
+        if think is not None:
+            payload["think"] = think
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
+        yield Chunk(model_digest=installed[resolved], applied_think=think)
+        visible = VisibleText()
         try:
             async with (
                 self.client() as client,
                 client.stream("POST", "/api/chat", json=payload) as r,
             ):
+                if r.status_code == 400 and think is not None:
+                    raise RuntimeUnavailable(
+                        "Ollama odmietla zvolený režim uvažovania. Vyberte Auto."
+                    )
                 r.raise_for_status()
                 async for line in r.aiter_lines():
                     if not line.strip():
@@ -107,20 +171,70 @@ class Ollama:
                     row = json.loads(line)
                     if row.get("error"):
                         raise RuntimeUnavailable("Ollama nedokončila generovanie.")
-                    piece = row.get("message", {}).get("content", "")
+                    message = row.get("message", {})
+                    piece = message.get("content", "")
                     if not isinstance(piece, str):
                         raise ValueError("Invalid message content")
-                    if piece:
-                        yield Chunk(text=piece)
-                    if row.get("done") is True:
+                    done = row.get("done") is True
+                    text, inline_thinking = visible.feed(piece, final=done)
+                    has_thinking = bool(message.get("thinking")) or inline_thinking
+                    if text or has_thinking:
+                        yield Chunk(text=text, thinking=has_thinking)
+                    if done:
                         yield Chunk(
-                            eval_count=row.get("eval_count"),
-                            eval_duration_ns=row.get("eval_duration"),
+                            eval_count=reported_count(row, "eval_count"),
+                            eval_duration_ns=reported_count(row, "eval_duration"),
+                            prompt_eval_count=reported_count(row, "prompt_eval_count"),
+                            load_duration_ns=reported_count(row, "load_duration"),
+                            runtime_duration_ns=reported_count(row, "total_duration"),
+                            done_reason=row.get("done_reason")
+                            if isinstance(row.get("done_reason"), str)
+                            else None,
                         )
                         return
         except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
             raise RuntimeUnavailable("Ollama nedokončila generovanie.") from exc
         raise RuntimeUnavailable("Ollama ukončila odpoveď bez potvrdenia dokončenia.")
+
+
+def reported_count(row: dict, key: str) -> int | None:
+    value = row.get(key)
+    return value if type(value) is int and value >= 0 else None
+
+
+class VisibleText:
+    """Discard legacy <think> blocks even when tags are split across chunks."""
+
+    def __init__(self):
+        self.inside = False
+        self.pending = ""
+
+    def feed(self, piece: str, *, final: bool) -> tuple[str, bool]:
+        pending = self.pending + piece
+        self.pending = ""
+        output = []
+        thinking = self.inside and bool(pending)
+        while pending:
+            marker = "</think>" if self.inside else "<think>"
+            match = re.search(marker, pending, re.IGNORECASE)
+            if match:
+                if not self.inside:
+                    output.append(pending[: match.start()])
+                pending = pending[match.end() :]
+                self.inside = not self.inside
+                thinking |= self.inside
+                continue
+            for size in range(min(len(marker) - 1, len(pending)), 0, -1):
+                if marker.startswith(pending[-size:].casefold()):
+                    self.pending = pending[-size:]
+                    pending = pending[:-size]
+                    break
+            if not self.inside:
+                output.append(pending)
+                if final:
+                    output.append(self.pending)
+            break
+        return "".join(output), thinking
 
 
 class MockRuntime:

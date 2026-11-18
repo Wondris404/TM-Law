@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 import sys
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -46,7 +46,7 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
         store.initialize()
         yield
 
-    app = FastAPI(title="TM-Law", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="TM-Law", version="0.1.1", lifespan=lifespan, docs_url=None, redoc_url=None)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -183,8 +183,9 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
                 raise HTTPException(404, "Dokument neexistuje.")
 
         async def stream():
-            async for event in answer(store, runtime, request, document):
-                yield json.dumps(event, ensure_ascii=False) + "\n"
+            async with aclosing(answer(store, runtime, request, document)) as events:
+                async for event in events:
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
 
         return StreamingResponse(stream(), media_type="application/x-ndjson")
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api, streamChat } from './api'
-import type { LocalDocument, Result, Settings, Source } from './api'
+import type { LocalDocument, Metrics, Reasoning, Result, Settings, Source } from './api'
 import './style.css'
 
 const navigation = [
@@ -14,8 +14,19 @@ const navigation = [
 
 type Tab = typeof navigation[number]['id']
 type Turn = { question: string; result: Result; simulated: boolean }
-type Preferences = { model: string; context: number; temperature: number; maxTokens: number }
-const defaults: Preferences = { model: '', context: 4096, temperature: 0.15, maxTokens: 768 }
+type Preferences = {
+  model: string
+  context: number
+  temperature: number
+  maxTokens: number
+  reasoning: Reasoning
+  measureMemory: boolean
+}
+const defaults: Preferences = {
+  model: '', context: 4096, temperature: 0.15, maxTokens: 768,
+  reasoning: 'auto', measureMemory: false,
+}
+const reasoningLabels = { auto: 'Auto · podľa modelu', on: 'Zapnuté', off: 'Vypnuté' }
 
 function stored<T>(key: string, fallback: T): T {
   try {
@@ -63,6 +74,37 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="field"><span>{label}</span>{children}</label>
 }
 
+const formatNumber = new Intl.NumberFormat('sk', { maximumFractionDigits: 2 })
+
+function measured(value: number | null, unit: string) {
+  return value === null ? 'Nedostupné' : `${formatNumber.format(value)} ${unit}`
+}
+
+function Performance({ metrics, simulated }: { metrics: Metrics; simulated: boolean }) {
+  const memory = metrics.memory
+  return <details>
+    <summary>{simulated ? 'Metriky simulácie' : 'Výkon odpovede'}</summary>
+    <dl className="note">
+      <dt>Celkový čas</dt><dd>{measured(metrics.seconds, 's')}</dd>
+      {!simulated && <>
+        <dt>Prvý token</dt><dd>{measured(metrics.first_token_seconds, 's')}</dd>
+        <dt>Prvý token odpovede</dt><dd>{measured(metrics.first_answer_token_seconds, 's')}</dd>
+        <dt>Vygenerované tokeny vrátane uvažovania</dt><dd>{measured(metrics.generated_tokens, 'tokenov')}</dd>
+        <dt>Rýchlosť generovania</dt><dd>{measured(metrics.tokens_per_second, 'tok/s')}</dd>
+      </>}
+      {memory?.processes.map((process) => <div key={process.pid}>
+        <dt>{process.role === 'backend' ? 'TM-Law' : 'Ollama'} · PID {process.pid} · špička RSS</dt>
+        <dd>{measured(process.peak_rss_bytes / 1048576, 'MiB')}</dd>
+      </div>)}
+      {memory && !simulated && <>
+        <dt>Spoločná špička PSS</dt>
+        <dd>{measured(memory.combined_peak_pss_bytes === null ? null : memory.combined_peak_pss_bytes / 1048576, 'MiB')}</dd>
+        {!memory.ollama_listener_measured && <dd>Proces Ollama sa nepodarilo priradiť k serveru.</dd>}
+      </>}
+    </dl>
+  </details>
+}
+
 function App() {
   const [tab, setTab] = useState<Tab>('chat')
   const [dark, setDark] = useState(() => stored('tm-law-theme', false))
@@ -79,6 +121,8 @@ function App() {
   const [chatQuery, setChatQuery] = useState('')
   const [pending, setPending] = useState('')
   const [draft, setDraft] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const [pendingWarning, setPendingWarning] = useState('')
   const [chatError, setChatError] = useState('')
   const [query, setQuery] = useState('')
   const [searchDate, setSearchDate] = useState('')
@@ -134,6 +178,8 @@ function App() {
     setPending(question)
     setDraft('')
     setChatError('')
+    setThinking(false)
+    setPendingWarning('')
     let simulated = Boolean(settings?.simulated)
     try {
       await streamChat({
@@ -141,9 +187,15 @@ function App() {
         options: {
           model: prefs.model || null, context_window: prefs.context,
           temperature: prefs.temperature, max_tokens: prefs.maxTokens,
+          reasoning: settings?.simulated ? 'auto' : prefs.reasoning, measure_memory: prefs.measureMemory,
         },
       }, current.signal, (item) => {
-        if (item.type === 'start') simulated = item.simulated
+        if (item.type === 'start') {
+          simulated = item.simulated
+          if (item.evidence_status === 'insufficient') setPendingWarning('Chýba právny podklad.')
+          if (item.evidence_status === 'version_conflict') setPendingWarning('Nájdené znenia sa líšia.')
+        }
+        if (item.type === 'thinking') setThinking(true)
         if (item.type === 'delta') setDraft((previous) => previous + item.text)
         if (item.type === 'done') {
           setHistory((previous) => [...previous, { question, simulated, result: item }].slice(-30))
@@ -261,6 +313,10 @@ function App() {
               {turn.simulated && <span className="chip warning">Testovacia odpoveď</span>}
               <p className="answer">{turn.result.answer}</p>
               {turn.result.notes.map((note) => <p className="muted note" key={note}>{note}</p>)}
+              {turn.result.retrieved_ids && <p className="muted note">
+                Nájdené úseky: {turn.result.retrieved_ids.length} · Overené identifikátory: {turn.result.citations.length}
+              </p>}
+              {turn.result.metrics && <Performance metrics={turn.result.metrics} simulated={turn.simulated} />}
               {turn.result.rejected.length > 0 && <p className="alert">Neoverené odkazy: {turn.result.rejected.length}</p>}
               {index < history.length - 1 && turn.result.citations.length > 0 && <details>
                 <summary>Zdroje odpovede</summary>
@@ -269,7 +325,10 @@ function App() {
             </article>)}
             {pending && <article className="turn">
               <p className="question">{pending}</p>
-              <small className="muted" role="status">Generujem · citácie čakajú na kontrolu</small>
+              <small className="muted" role="status">
+                {thinking && !draft ? 'Model uvažuje…' : 'Generujem · citácie čakajú na kontrolu'}
+              </small>
+              {pendingWarning && <p className="alert">{pendingWarning}</p>}
               <p className="answer">{draft}</p>
             </article>}
           </div>
@@ -284,8 +343,11 @@ function App() {
                 {documents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select></Field>
               {pending
-                ? <button type="button" className="secondary" onClick={() => controller.current?.abort()}>Zastaviť</button>
-                : <button type="submit" className="primary" disabled={question.trim().length < 3}>Odoslať ↑</button>}
+                ? <button key="stop" type="button" className="secondary" onClick={(event) => {
+                  event.preventDefault()
+                  controller.current?.abort()
+                }}>Zastaviť</button>
+                : <button key="send" type="submit" className="primary" disabled={question.trim().length < 3}>Odoslať ↑</button>}
             </div>
             <details><summary>Spresniť vyhľadávanie</summary>
               <Field label="Hľadané výrazy, číslo predpisu alebo paragraf">
@@ -345,14 +407,25 @@ function App() {
           {prefs.model && !models.includes(prefs.model) && <option>{prefs.model}</option>}
           {models.map((model) => <option key={model}>{model}</option>)}
         </select></Field>
+        <Field label="Uvažovanie"><select value={prefs.reasoning} disabled={settings?.simulated}
+          onChange={(event) => setPrefs({ ...prefs, reasoning: event.target.value as Reasoning })}>
+          {Object.entries(reasoningLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></Field>
+        <label className="checkbox"><input type="checkbox" checked={prefs.measureMemory}
+          onChange={(event) => setPrefs({ ...prefs, measureMemory: event.target.checked })} />
+          Merať pamäť procesov pri odpovedi
+        </label>
         <div className="form-row">
-          <Field label="Kontext"><select value={prefs.context} onChange={(event) => setPrefs({ ...prefs, context: Number(event.target.value) })}>
+          <Field label="Kontext"><select value={prefs.context} onChange={(event) => {
+            const context = Number(event.target.value)
+            setPrefs({ ...prefs, context, maxTokens: Math.min(prefs.maxTokens, context / 2) })
+          }}>
             {[2048, 4096, 8192, 16384, 32768].map((n) => <option key={n}>{n}</option>)}
           </select></Field>
           <Field label="Teplota"><input type="number" min="0" max="1" step=".05" value={prefs.temperature}
             onChange={(event) => setPrefs({ ...prefs, temperature: Math.min(1, Math.max(0, Number(event.target.value))) })} /></Field>
-          <Field label="Limit odpovede"><select value={prefs.maxTokens} onChange={(event) => setPrefs({ ...prefs, maxTokens: Number(event.target.value) })}>
-            {[256, 512, 768, 1024].map((n) => <option key={n}>{n}</option>)}
+          <Field label="Limit generovania"><select value={prefs.maxTokens} onChange={(event) => setPrefs({ ...prefs, maxTokens: Number(event.target.value) })}>
+            {[256, 512, 768, 1024, 2048, 4096, 8192].filter((n) => n <= prefs.context / 2).map((n) => <option key={n}>{n}</option>)}
           </select></Field>
           <button type="button" className="secondary" onClick={() => void refreshModels()}>Obnoviť zoznam modelov</button>
         </div>
@@ -361,7 +434,6 @@ function App() {
           <dt>Adresa runtime · TM_LAW_OLLAMA_URL</dt><dd>{settings?.runtime_url ?? 'Testovací adaptér alebo nedostupný server'}</dd>
           <dt>Úložisko · TM_LAW_DATA_DIR</dt><dd>{settings?.data_directory ?? 'Nedostupné'}</dd>
           <dt>Jazyk</dt><dd>Slovenčina</dd>
-          <dt>Špičková pamäť</dt><dd>Meranie nie je dostupné</dd>
         </dl>
       </section>}
       <footer>TM-Law · Lokálny právny výskum a práca s dokumentmi</footer>

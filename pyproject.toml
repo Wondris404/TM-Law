@@ -1,10 +1,11 @@
 [project]
 name = "tm-law"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
+  "psutil>=7.1,<8",
   "pypdf>=6,<7",
   "python-multipart>=0.0.22,<1",
   "uvicorn>=0.34,<1",

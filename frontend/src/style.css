@@ -116,3 +116,6 @@ footer { padding: 18px 0 0; color: var(--muted); font-size: .8rem; }
   nav button { padding: 6px; font-size: .84rem; }
   main { padding-top: 16px; }
 }
+
+.checkbox { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.checkbox input { width: auto; accent-color: var(--accent); }
