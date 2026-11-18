@@ -157,7 +157,10 @@ async def _answer(
     evidence = []
     used_sources = []
     budget -= len(excerpt or "")
-    for source in sources:
+    eligible_sources = [source for source in sources if source["norm_status"] != "repealed"]
+    if len(eligible_sources) != len(sources):
+        notes.append("Zrušené ustanovenia boli vynechané z podkladov pre model.")
+    for source in eligible_sources:
         if budget < 350:
             break
         body = source["text"][: min(1300, budget - 300)]
@@ -175,7 +178,7 @@ async def _answer(
         )
         used_sources.append(source)
         budget -= len(body) + 300
-    if sources and not used_sources:
+    if eligible_sources and not used_sources:
         notes.append("Zvolený kontext neumožnil vložiť nájdené úseky do zadania pre model.")
     conflicts = conflicting_versions(used_sources)
     if conflicts:
@@ -256,7 +259,11 @@ async def _answer(
             "metrics": generation_metrics(started, first_token, first_answer_token, final),
         }
         return
-    text, citations, rejected = validate_citations("".join(chunks), used_sources)
+    citation_context = [
+        {**source, "text": item["text"], "context_truncated": item["text"] != source["text"]}
+        for source, item in zip(used_sources, evidence, strict=True)
+    ]
+    text, citations, rejected = validate_citations("".join(chunks), citation_context)
     if not citations:
         notes.append("Odpoveď neobsahuje overený odkaz na právny úsek.")
     if final.done_reason == "length":

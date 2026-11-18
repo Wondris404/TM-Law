@@ -66,7 +66,8 @@ function SourceCard({ source, number }: { source: Source; number?: number }) {
       source.section && (source.section.startsWith('cl-') ? `Čl. ${source.section.slice(3)}` : `§ ${source.section}`), source.paragraph && `ods. ${source.paragraph}`,
       source.letter && `písm. ${source.letter}`, source.case_number, source.decision_date,
     ].filter(Boolean).join(' · ')}</p>
-    <p className="excerpt">{source.text}</p>
+    <p className="excerpt">{source.text}{source.context_truncated ? ' […]' : ''}</p>
+    {source.context_truncated && <small>Skrátený úsek použitý v kontexte modelu</small>}
     <small>{source.authority} · {interval}</small>
     {!source.fictional && <small>{source.original_archived
       ? 'Originál uložený lokálne' : 'Pôvodný dokument treba overiť'}</small>}
