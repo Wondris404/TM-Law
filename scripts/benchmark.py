@@ -17,6 +17,7 @@ from backend.tm_law.evaluation import benchmark_cases, deterministic_checks
 from backend.tm_law.rag import answer
 from backend.tm_law.runtime import MockRuntime, Ollama
 from backend.tm_law.schemas import ChatInput, LegalVersion, RuntimeOptions
+from backend.tm_law.source_audit import audit_sources
 from backend.tm_law.store import SCHEMA_VERSION, Store
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,6 +174,17 @@ def human_summary(runs):
         )
 
 
+def write_report(parser, output: Path | None, report):
+    data = json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    if output is None:
+        sys.stdout.write(data)
+        return
+    try:
+        output.write_text(data, encoding="utf-8")
+    except OSError as exc:
+        parser.error(f"Could not write UTF-8 report. {exc}")
+
+
 async def main(argv=None):
     parser = argparse.ArgumentParser(description="Compare local TM-Law runtimes on UTF-8 JSONL.")
     parser.add_argument("--cases", type=Path)
@@ -189,7 +201,22 @@ async def main(argv=None):
     parser.add_argument("--summary", action="store_true", help="Write a readable table to stderr.")
     parser.add_argument("--output", type=Path, help="Write JSON directly as UTF-8.")
     parser.add_argument("--include-answers", action="store_true", help="Include model answer text.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--audit-only", action="store_true", help="Audit references without inference."
+    )
+    mode.add_argument(
+        "--require-source-audit",
+        action="store_true",
+        help="Refuse model requests unless the source audit succeeds.",
+    )
     args = parser.parse_args(argv)
+    if args.audit_only and args.model:
+        parser.error("--audit-only does not take --model.")
+    if args.require_source_audit and not args.model:
+        parser.error("--require-source-audit requires --model.")
+    if (args.audit_only or args.require_source_audit) and not (args.cases and args.data_dir):
+        parser.error("Source audits require both --cases and --data-dir.")
     if not 1 <= args.repeats <= 20:
         parser.error("--repeats must be between 1 and 20.")
     simulated = not args.model
@@ -230,12 +257,20 @@ async def main(argv=None):
         parser.error("Tasks with expected source IDs need --data-dir.")
 
     runs = []
+    dataset_hash = hashlib.sha256(case_bytes).hexdigest()
     with tempfile.TemporaryDirectory(prefix="tm-law-benchmark-") as temp:
         store = Store(Path(temp))
         try:
-            corpus_hash = snapshot_corpus(store, args.data_dir, simulated)
+            corpus_hash = snapshot_corpus(store, args.data_dir, simulated and not args.audit_only)
         except (sqlite3.Error, OSError, ValueError) as exc:
             parser.error(f"Could not read the legal corpus. {exc}")
+        audit = None
+        if args.audit_only or args.require_source_audit:
+            audit = audit_sources(store, selected)
+            audit.update(dataset_sha256=dataset_hash, corpus_sha256=corpus_hash)
+            if args.audit_only or not audit["ready"]:
+                write_report(parser, args.output, audit)
+                return 0 if audit["ready"] else 2
         for options in work:
             runtime = (
                 MockRuntime()
@@ -264,7 +299,8 @@ async def main(argv=None):
                         "repeats": args.repeats,
                         "ollama_keep_alive": 0 if not simulated else None,
                     },
-                    "dataset_sha256": hashlib.sha256(case_bytes).hexdigest(),
+                    "dataset_sha256": dataset_hash,
+                    **({"source_audit": audit} if audit is not None else {}),
                     "corpus_sha256": corpus_hash,
                     "platform": {"os": platform.system(), "architecture": platform.machine()},
                     "cases": rows,
@@ -276,14 +312,7 @@ async def main(argv=None):
                     "summary": describe(rows),
                 }
             )
-    report = json.dumps(runs, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
-    if args.output:
-        try:
-            args.output.write_text(report, encoding="utf-8")
-        except OSError as exc:
-            parser.error(f"Could not write UTF-8 report. {exc}")
-    else:
-        sys.stdout.write(report)
+    write_report(parser, args.output, runs)
     if args.summary:
         human_summary(runs)
     return int(any(run["completed"] != run["total"] for run in runs))

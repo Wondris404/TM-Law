@@ -30,3 +30,5 @@ Import porovná deklarovaný SHA-256 s bajtmi originálu a overí prítomnosť v
 Pribalené sú iba fiktívne testovacie dáta. [Zdroje, obmedzenia prístupu a presné pokrytie](LEGAL_SOURCES.md).
 
 Projekt má licenciu MIT. Importovaný obsah a modelové váhy majú vlastné podmienky použitia, ktoré treba zaznamenať a preveriť pred ďalšou distribúciou.
+
+Pred použitím importovaných znení v hodnotení spustite kontrolu benchmarkových referencií. Overí, či očakávaný identifikátor má lokálny archivovaný podklad a či znenie pokrýva rozhodujúci dátum z úlohy. [Kontrola referencií pred inferenciou](BENCHMARKS.md#kontrola-referencií-pred-inferenciou).

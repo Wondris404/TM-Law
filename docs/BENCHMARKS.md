@@ -65,3 +65,16 @@ uv run --locked python -m scripts.legal_review aggregate --key .tm-law/kluc.json
 ```
 
 Hodnotiteľ dostane hárok bez názvov modelov. Vráti pole JSON objektov s `review_id` a posudkom `legal_correctness`, `citation_support`, `completeness` v hodnotách `yes`, `partial`, `no` alebo `null`. Polia `unsupported_claims` a `unnecessary_refusal` sú `true`, `false` alebo `null`. Kľúč držte oddelene od hárka. Zhrnutie vykazuje iba skutočne posúdené položky. Automatická kontrola identifikátorov nepriraďuje modelu právne skóre.
+
+## Kontrola referencií pred inferenciou
+
+Pri úlohách s reálnymi zdrojmi použite `--audit-only` ešte pred spustením Ollamy. Kontrola prečíta snímku právnej databázy. Pri očakávaných citáciách overí existenciu pasáže, väzbu na archivovaný originál, SHA‑256 originálu a výskyt pasáže v texte. Pri rozhodujúcom dátume skontroluje dátum rozhodnutia alebo doložený interval účinnosti. Pri historickej úlohe bez rozhodujúceho dátumu kontrola zlyhá.
+
+```powershell
+uv run --locked python -m scripts.benchmark --audit-only --cases overene.jsonl --data-dir .tm-law/praca --output .tm-law/audit-zdrojov.json
+uv run --locked python -m scripts.benchmark --model qwen3.5:4b --cases overene.jsonl --data-dir .tm-law/praca --require-source-audit --summary
+```
+
+Výstup auditu je objekt JSON s označením `source_audit`. Obsahuje identifikátory úloh, referencií a výsledky kontrol. Otázky ani text pasáží nezapisuje. Pri zlyhaní je návratový kód 2 a režim `--require-source-audit` nevykoná žiadnu inferenciu. Úspech vyžaduje aspoň jednu úlohu s overenými referenciami a žiadnu neúspešnú referenčnú úlohu. Fiktívne úlohy a prípady bez očakávaného zdroja sa vykazujú samostatne. Pri úspešnom behu modelu je audit súčasťou bežného JSON reportu.
+
+Audit overuje integritu archivovaných údajov a súlad dátumov s uloženými metadátami. Pôvod záznamu, právny význam prechodných ustanovení a správnosť záveru posudzuje človek.
