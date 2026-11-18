@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -112,4 +113,5 @@ async def main():
 if __name__ == "__main__":
     import asyncio
 
+    sys.stdout.reconfigure(encoding="utf-8")
     raise SystemExit(asyncio.run(main()))
