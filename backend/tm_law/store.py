@@ -76,6 +76,49 @@ STOP_WORDS = frozenset(
 )
 
 
+def separated_references(query: str) -> list[str] | None:
+    """Return semicolon-separated explicit citations, or None when the query is ordinary text."""
+    parts = [part.strip() for part in query.split(";") if part.strip()]
+    if len(parts) < 2:
+        return None
+    parsed = []
+    for part in parts:
+        laws = list(LAW_PATTERN.finditer(part))
+        sections = list(SECTION_PATTERN.finditer(part))
+        if len(laws) > 1 or len(sections) > 1 or not (laws or sections):
+            return None
+        parsed.append((part, laws, sections))
+    law_keys = {law.groups() for _, laws, _ in parsed for law in laws}
+    if any(not laws and sections for _, laws, sections in parsed) and len(law_keys) != 1:
+        return None
+    inherited = next(iter(law_keys)) if len(law_keys) == 1 else None
+    references = []
+    for part, laws, sections in parsed:
+        if inherited and not laws and sections:
+            number, year = inherited
+            part = f"{number}/{year} {part}"
+        references.append(part)
+    return references
+
+
+def merge_reference_hits(groups: list[list[dict]], limit: int) -> list[dict]:
+    merged = []
+    seen = set()
+    depth = max((len(group) for group in groups), default=0)
+    for index in range(depth):
+        for group in groups:
+            if index >= len(group):
+                continue
+            hit = group[index]
+            if hit["citation_id"] in seen:
+                continue
+            seen.add(hit["citation_id"])
+            merged.append(hit)
+            if len(merged) >= limit:
+                return merged
+    return merged
+
+
 class Store:
     def __init__(self, directory: Path):
         self.directory = directory
@@ -205,6 +248,20 @@ class Store:
         limit=10,
         include_fictional=True,
     ) -> list[dict]:
+        references = separated_references(query)
+        if references:
+            groups = [
+                self.search(
+                    reference,
+                    kind=kind,
+                    case_number=case_number,
+                    as_of=as_of,
+                    limit=limit,
+                    include_fictional=include_fictional,
+                )
+                for reference in references
+            ]
+            return merge_reference_hits(groups, limit)
         law = LAW_PATTERN.search(query)
         section = SECTION_PATTERN.search(query)
         paragraph = PARAGRAPH_PATTERN.search(query) if section else None
