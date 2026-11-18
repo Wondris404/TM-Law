@@ -1,0 +1,5 @@
+# Install the suitable official PyTorch wheel first. These packages are optional.
+accelerate==1.16.0
+peft==0.21.3
+pydantic==2.14.3
+transformers==5.23.0

@@ -8,3 +8,6 @@ frontend/dist/
 *.sqlite3*
 .tm-law/
 .coverage
+*.safetensors
+*.gguf
+checkpoint-*/

@@ -5,3 +5,6 @@
 3. Doplniť hodnotenie s právnikom a rozšíriť testy o nesprávne citácie, dátumové rozpory, legitímne citlivé otázky a úmyselne zavádzajúce dokumenty.
 4. Posilniť izoláciu extrakcie a plán ochrany spisov. Doplniť vymazávanie súvisiacich výstupov, správu prístupu a šifrovanie.
 5. Až po zmeraní referenčných modelov vyhodnotiť llama.cpp, OCR, hybridné vyhľadávanie a desktopový balík.
+
+
+Infraštruktúra pokrýva import s archivovaným originálom, slovenskú štartovaciu sadu a prípravu LoRA/QLoRA. Skutočné pokrytie verejného práva a odborné overenie sú samostatné míľniky. [Pokrytie](LEGAL_SOURCES.md) · [Tréning](TRAINING.md)

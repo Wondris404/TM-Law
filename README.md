@@ -15,7 +15,7 @@ npm --prefix frontend run build
 uv run --locked python -m uvicorn backend.tm_law.api:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Otvorte `http://127.0.0.1:8000`. Vytvorí sa prázdna databáza v `.tm-law/`. Pridajte export s overeným pôvodom cez **Právna databáza → Importovať znenie predpisu alebo rozhodnutie** alebo cez `uv run --locked python -m scripts.import_legal VAS_SUBOR.json`. Formát a význam dátumov popisuje [LEGAL_DATA.md](docs/LEGAL_DATA.md).
+Otvorte `http://127.0.0.1:8000`. Vytvorí sa prázdna databáza v `.tm-law/`. Pridajte export s overeným pôvodom cez **Právna databáza → Importovať znenie predpisu alebo rozhodnutie** alebo cez `uv run --locked python -m scripts.import_legal VAS_SUBOR.json`. Balík s archivovaným originálom pripravíte pomocou `scripts.legal_corpus`. Formát a význam dátumov popisuje [LEGAL_DATA.md](docs/LEGAL_DATA.md). Aktuálny stav prístupu k oficiálnym portálom je v [LEGAL_SOURCES.md](docs/LEGAL_SOURCES.md).
 
 ## Ukážkový režim
 
@@ -34,8 +34,8 @@ V databáze vyhľadajte `9999/2099 § 7 evidencia` k dátumu `2022-12-20` a poto
 Po spustení backendu na porte 8000 použite `npm --prefix frontend run dev` pre rozhranie s automatickým načítaním zmien. Vite posiela požiadavky `/api` lokálnemu backendu.
 
 ```sh
-uv run --locked ruff check backend scripts tests
-uv run --locked ruff format --check backend scripts tests
+uv run --locked ruff check backend scripts tests training
+uv run --locked ruff format --check backend scripts tests training
 uv run --locked pytest -q
 uv run --locked python -m scripts.benchmark
 npm --prefix frontend run build
@@ -45,4 +45,4 @@ V nastaveniach môžete zvoliť režim uvažovania Ollamy a voliteľne merať pa
 
 MVP podporuje TXT, PDF s textovou vrstvou a DOCX. Históriu si prehliadač pamätá lokálne, pričom každá otázka sa posudzuje samostatne. Dôverné údaje a odpovede sa ukladajú bez aplikačného šifrovania. Zdrojová karta overuje identitu použitého úseku, právnu použiteľnosť a úplnosť zdrojov musí posúdiť právnik.
 
-[Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md) · [Poznámky k v0.1.1](docs/RELEASE_0.1.1.md)
+[Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Tréning](docs/TRAINING.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md) · [Poznámky k v0.1.1](docs/RELEASE_0.1.1.md)

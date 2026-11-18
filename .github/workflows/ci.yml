@@ -25,10 +25,12 @@ jobs:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
-      - run: uv run --locked ruff check backend scripts tests
-      - run: uv run --locked ruff format --check backend scripts tests
+      - run: uv run --locked ruff check backend scripts tests training
+      - run: uv run --locked ruff format --check backend scripts tests training
       - run: uv run --locked pytest -q -m "not ollama"
-      - run: uv run --locked python -m scripts.benchmark --summary --output benchmark-smoke.json
+      - run: uv run --locked python -m scripts.legal_corpus --data-dir .tm-law/corpus-ci import data/corpus-example/manifest.json
+      - run: uv run --locked python -m scripts.benchmark --cases benchmarks/slovak-starter.jsonl --summary --output benchmark-smoke.json
+      - run: uv run --locked python -m scripts.prepare_training --input data/training-smoke.jsonl --holdout benchmarks/slovak-starter.jsonl --output .tm-law/train-ci
       - if: runner.os == 'Windows'
         uses: actions/setup-node@v4
         with:
