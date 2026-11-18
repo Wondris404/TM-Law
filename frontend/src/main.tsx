@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api, streamChat } from './api'
 import type { LocalDocument, Metrics, ModelMetadata, Reasoning, Result, Settings, Source } from './api'
+import { persistentHistory, rememberTurn } from './sessionHistory'
 import './style.css'
 
 const navigation = [
@@ -13,7 +14,7 @@ const navigation = [
 ] as const
 
 type Tab = typeof navigation[number]['id']
-type Turn = { question: string; result: Result; simulated: boolean }
+type Turn = { question: string; result: Result; simulated: boolean; privateDocument?: boolean }
 type Preferences = {
   model: string
   context: number
@@ -179,12 +180,13 @@ function App() {
     persist('tm-law-theme', dark)
   }, [dark])
 
-  useEffect(() => persist('tm-law-history', history), [history])
+  useEffect(() => persist('tm-law-history', persistentHistory(history)), [history])
   useEffect(() => persist('tm-law-preferences', prefs), [prefs])
 
   async function submitChat(event: FormEvent) {
     event.preventDefault()
     if (controller.current || question.trim().length < 3) return
+    const attached = Boolean(doc)
     const current = new AbortController()
     controller.current = current
     setPending(question)
@@ -211,7 +213,9 @@ function App() {
         if (item.type === 'thinking') setThinking(true)
         if (item.type === 'delta') setDraft((previous) => previous + item.text)
         if (item.type === 'done') {
-          setHistory((previous) => [...previous, { question, simulated, result: item }].slice(-30))
+          setHistory((previous) => rememberTurn(previous, {
+            question, simulated, result: item, ...(attached ? { privateDocument: true } : {}),
+          }))
           setQuestion('')
         }
       })
@@ -325,6 +329,7 @@ function App() {
             {history.map((turn, index) => <article className="turn" key={index}>
               <p className="question">{turn.question}</p>
               {turn.simulated && <span className="chip warning">Testovacia odpoveď</span>}
+              {turn.privateDocument && <span className="chip">Len v tejto relácii</span>}
               <p className="answer">{turn.result.answer}</p>
               {turn.result.notes.map((note) => <p className="muted note" key={note}>{note}</p>)}
               {turn.result.retrieved_ids && <p className="muted note">
@@ -356,6 +361,7 @@ function App() {
                 <option value="">Bez dokumentu</option>
                 {documents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select></Field>
+              {doc && <p className="muted" role="status">Otázky a odpovede s pripojeným dokumentom zostanú len v pamäti tejto karty.</p>}
               {pending
                 ? <button key="stop" type="button" className="secondary" onClick={(event) => {
                   event.preventDefault()
