@@ -1,10 +1,10 @@
-# TM-Law · Thomas More Legal AI
+# TM-Law v0.1.1 · Thomas More Legal AI
 
 Lokálny právny asistent pre slovenských advokátov. MVP prepája právne vyhľadávanie v SQLite, porovnávanie dátumov účinnosti, streamovaný chat s lokálnou Ollamou a kontrolu citačných identifikátorov. Súkromné dokumenty spracúva na počítači používateľa.
 
 ## Spustenie
 
-Predpoklady sú Python 3.12+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js 24 s npm a pre skutočnú inferenciu [Ollama](https://ollama.com/download). Postup pre Windows a nastavenie modelu sú v [WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md).
+Predpoklady sú Python 3.12+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js 24 s npm a pre skutočnú inferenciu [Ollama](https://ollama.com/download). Postup pre Windows vrátane spúšťača, prípravy modelu a offline skúšky je v [WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md).
 
 Z koreňa repozitára:
 
@@ -41,6 +41,8 @@ uv run --locked python -m scripts.benchmark
 npm --prefix frontend run build
 ```
 
+V nastaveniach môžete zvoliť režim uvažovania Ollamy a voliteľne merať pamäť procesov. Porovnanie modelov, kontextov alebo režimov sa spúšťa cez [benchmark](docs/BENCHMARKS.md).
+
 MVP podporuje TXT, PDF s textovou vrstvou a DOCX. Históriu si prehliadač pamätá lokálne, pričom každá otázka sa posudzuje samostatne. Dôverné údaje a odpovede sa ukladajú bez aplikačného šifrovania. Zdrojová karta overuje identitu použitého úseku, právnu použiteľnosť a úplnosť zdrojov musí posúdiť právnik.
 
-[Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md)
+[Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md) · [Poznámky k v0.1.1](docs/RELEASE_0.1.1.md)

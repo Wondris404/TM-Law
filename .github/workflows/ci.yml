@@ -28,7 +28,20 @@ jobs:
       - run: uv run --locked ruff check backend scripts tests
       - run: uv run --locked ruff format --check backend scripts tests
       - run: uv run --locked pytest -q -m "not ollama"
-      - run: uv run --locked python -m scripts.benchmark
+      - run: uv run --locked python -m scripts.benchmark --summary --output benchmark-smoke.json
+      - if: runner.os == 'Windows'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: runner.os == 'Windows'
+        run: npm.cmd --prefix frontend ci
+      - if: runner.os == 'Windows'
+        run: npm.cmd --prefix frontend run build
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/start-tm-law.ps1 -Mock -SmokeTest -Port 18080
   frontend:
     runs-on: ubuntu-latest
     defaults:
