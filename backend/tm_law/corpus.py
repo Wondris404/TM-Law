@@ -21,7 +21,8 @@ from .store import Store
 MAX_MANIFEST = 5 * 1024 * 1024
 SOURCE_EXTENSIONS = {".txt", ".html", ".htm", ".xml", ".pdf"}
 SECTION_HEADER = re.compile(
-    r"^\s*(?:§\s*(\d+[a-z]?)|Čl\.\s*(\d+[a-z]?|[ivxlcdm]+))\s*$", re.IGNORECASE | re.MULTILINE
+    r"^\s*(?:§\s*(\d+[a-z]?)|(?:článok|clanok|čl|cl)\.?\s*(\d+[a-z]?|[ivxlcdm]+))\s*$",
+    re.IGNORECASE | re.MULTILINE,
 )
 PARAGRAPH_HEADER = re.compile(r"^\s*\((\d+[a-z]?)\)\s*", re.IGNORECASE | re.MULTILINE)
 

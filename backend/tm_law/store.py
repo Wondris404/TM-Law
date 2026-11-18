@@ -47,7 +47,9 @@ CREATE TABLE IF NOT EXISTS document (
 LAW_PATTERN = re.compile(r"(?<!\w)(\d{1,8})\s*/\s*(\d{4})(?!\w)")
 SCHEMA_VERSION = 2
 SECTION_PATTERN = re.compile(
-    r"§\s*(?P<section>\d+[a-z]?)|\b(?:čl|cl)\.\s*(?P<article>\d+[a-z]?|[ivxlcdm]+)", re.IGNORECASE
+    r"§\s*(?P<section>\d+[a-z]?)"
+    r"|\b(?:článok|clanok|čl|cl)\.?\s*(?P<article>\d+[a-z]?|[ivxlcdm]+)",
+    re.IGNORECASE,
 )
 PARAGRAPH_PATTERN = re.compile(r"\b(?:ods|odsek)\.?\s*(\d+[a-z]?)", re.IGNORECASE)
 LETTER_PATTERN = re.compile(r"\b(?:písm|pism|písmeno|pismeno)\.?\s*([a-z])(?=\)|\b)", re.IGNORECASE)

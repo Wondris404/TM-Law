@@ -43,6 +43,19 @@ def write_package(tmp_path, raw=TEXT.encode()):
     return path, package
 
 
+def test_article_heading_accepts_full_word():
+    drafted = draft_sections("Článok 1\n(1) Prvé pravidlo.\n")
+    assert drafted == [
+        {
+            "source_id": "s-cl-1-o-1",
+            "section": "cl-1",
+            "paragraph": "1",
+            "text": "Prvé pravidlo.",
+        }
+    ]
+    assert draft_sections("Čl. 1\n(1) Prvé pravidlo.\n") == drafted
+
+
 def test_archive_package_date_filter_and_coverage(tmp_path):
     path, package = write_package(tmp_path)
     package["version"]["passages"][0]["norm_status"] = "transitional"

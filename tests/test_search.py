@@ -91,3 +91,27 @@ def test_separated_references_share_date_filter_and_limit(tmp_path):
     assert {hit["citation_id"] for hit in ordinary} == {"a-late/p7", "a-early/p7"}
     hidden = store.search("9999/2099 § 7; 9998/2099 § 2", as_of=overlap, include_fictional=False)
     assert hidden == []
+
+
+def test_article_word_matches_stored_abbreviation(tmp_path):
+    store = Store(tmp_path)
+    store.initialize()
+    store.import_version(
+        version(
+            "article",
+            9999,
+            2099,
+            date(2024, 1, 1),
+            date(2025, 1, 1),
+            [
+                {"source_id": "a1", "section": "cl-1", "text": "Prvý článok."},
+                {"source_id": "a2", "section": "cl-2", "text": "Druhý článok."},
+            ],
+        )
+    )
+    day = date(2024, 6, 1)
+    for query in ("9999/2099 Čl. 1", "9999/2099 Článok 1", "9999/2099 clanok 1"):
+        hits = store.search(query, as_of=day)
+        assert [hit["citation_id"] for hit in hits] == ["article/a1"]
+    both = store.search("9999/2099 Článok 1; Článok 2", as_of=day, limit=2)
+    assert [hit["citation_id"] for hit in both] == ["article/a1", "article/a2"]
