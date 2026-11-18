@@ -46,7 +46,7 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
         store.initialize()
         yield
 
-    app = FastAPI(title="TM-Law", version="0.1.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="TM-Law", version="0.1.2", lifespan=lifespan, docs_url=None, redoc_url=None)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -98,6 +98,9 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
     @app.get("/api/models")
     async def models():
         try:
+            if isinstance(runtime, Ollama):
+                catalog = await runtime.catalog()
+                return {"models": list(catalog), "metadata": catalog, "simulated": False}
             return {"models": await runtime.models(), "simulated": runtime.simulated}
         except RuntimeUnavailable as exc:
             raise HTTPException(503, str(exc)) from exc

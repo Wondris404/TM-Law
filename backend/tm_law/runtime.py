@@ -27,6 +27,7 @@ class Chunk:
     done_reason: str | None = None
     thinking: bool = False
     model_digest: str | None = None
+    model_metadata: dict | None = None
     applied_think: bool | str | None = None
 
 
@@ -73,23 +74,24 @@ class Ollama:
             transport=self.transport,
         )
 
-    async def installed(self) -> dict[str, str | None]:
+    async def catalog(self) -> dict[str, dict]:
         try:
             async with self.client() as client:
                 response = await client.get("/api/tags")
                 response.raise_for_status()
-                return {
-                    item["name"]: item.get("digest")
-                    for item in response.json()["models"]
-                    if not item["name"].casefold().endswith((":cloud", "-cloud"))
-                    and not item.get("remote_model")
-                    and not item.get("remote_host")
-                }
+                models = response.json()["models"]
+            return {
+                item["name"]: catalog_entry(item)
+                for item in models
+                if not item["name"].casefold().endswith((":cloud", "-cloud"))
+                and not item.get("remote_model")
+                and not item.get("remote_host")
+            }
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as exc:
             raise RuntimeUnavailable("Ollama neodpovedá. Spustite lokálny server Ollama.") from exc
 
     async def models(self) -> list[str]:
-        return list(await self.installed())
+        return list(await self.catalog())
 
     async def thinking_control(self, model: str, mode: str) -> bool | str | None:
         if mode == "auto":
@@ -132,7 +134,7 @@ class Ollama:
 
     async def stream(self, messages: list[dict], options: RuntimeOptions) -> AsyncIterator[Chunk]:
         model = options.model or self.default_model
-        installed = await self.installed()
+        installed = await self.catalog()
         resolved = model if model in installed else f"{model}:latest"
         if resolved not in installed:
             raise RuntimeUnavailable(MODEL_ERROR)
@@ -147,13 +149,16 @@ class Ollama:
                 "num_predict": options.max_tokens,
             },
         }
+        if options.device == "cpu":
+            payload["options"]["num_gpu"] = 0
         if options.seed is not None:
             payload["options"]["seed"] = options.seed
         if think is not None:
             payload["think"] = think
         if self.keep_alive is not None:
             payload["keep_alive"] = self.keep_alive
-        yield Chunk(model_digest=installed[resolved], applied_think=think)
+        metadata = installed[resolved]
+        yield Chunk(model_digest=metadata["digest"], model_metadata=metadata, applied_think=think)
         visible = VisibleText()
         try:
             async with (
@@ -195,6 +200,27 @@ class Ollama:
         except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
             raise RuntimeUnavailable("Ollama nedokončila generovanie.") from exc
         raise RuntimeUnavailable("Ollama ukončila odpoveď bez potvrdenia dokončenia.")
+
+
+def catalog_entry(item: dict) -> dict:
+    details = item.get("details")
+    if not isinstance(details, dict):
+        details = {}
+
+    def label_value(values, key):
+        value = values.get(key)
+        return value if isinstance(value, str) and 0 < len(value) <= 240 else None
+
+    return {
+        "tag": item["name"],
+        "digest": label_value(item, "digest"),
+        "format": label_value(details, "format"),
+        "family": label_value(details, "family"),
+        "parameter_size": label_value(details, "parameter_size"),
+        "quantization_level": label_value(details, "quantization_level"),
+        "disk_size_bytes": reported_count(item, "size"),
+        "experimental": item["name"].rsplit("/", 1)[-1].casefold().startswith("tm-law"),
+    }
 
 
 def reported_count(row: dict, key: str) -> int | None:

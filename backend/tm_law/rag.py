@@ -21,6 +21,8 @@ Nevymýšľaj paragrafy, judikatúru ani URL. Fiktívne zdroje používaj len na
 Ak zdroje chýbajú, vysvetli čo treba overiť a nevydávaj hypotézy za zistené právo.
 Pri zadanom dátume nerozširuj poznatky na znenia mimo vyhľadaného obdobia.
 Ak sú úseky rozdielne alebo si odporujú, pomenuj rozpor a nevynucuj jednoznačný záver.
+Zrušený úsek nepouži ako účinné ustanovenie. Pri prechodnom ustanovení pomenuj
+podmienky jeho uplatnenia a nepredpokladaj spätné účinky novely.
 Bez právnych podkladov môžeš sumarizovať priložený dokument a navrhnúť ďalšie overenie."""
 
 
@@ -165,6 +167,7 @@ async def _answer(
                 "from": source["effective_from"],
                 "until": source["effective_until"],
                 "fictional": source["fictional"],
+                "norm_status": source["norm_status"],
                 "text": body,
             }
         )
@@ -201,7 +204,7 @@ async def _answer(
     final = Chunk()
     first_token = first_answer_token = None
     thinking_observed = False
-    model_digest = applied_think = None
+    model_digest = applied_think = model_metadata = None
     yield {
         "type": "start",
         "simulated": runtime.simulated,
@@ -212,6 +215,8 @@ async def _answer(
         async with aclosing(runtime.stream(messages, request.options)) as stream:
             async for chunk in stream:
                 elapsed = perf_counter() - started
+                if chunk.model_metadata:
+                    model_metadata = chunk.model_metadata
                 if chunk.model_digest:
                     model_digest = chunk.model_digest
                 if chunk.applied_think is not None:
@@ -268,6 +273,7 @@ async def _answer(
             "thinking_observed": thinking_observed,
         },
         "model_digest": model_digest,
+        "model_metadata": model_metadata,
         "metrics": generation_metrics(started, first_token, first_answer_token, final),
     }
 

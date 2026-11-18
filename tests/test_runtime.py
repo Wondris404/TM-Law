@@ -276,3 +276,39 @@ async def test_cancelled_answer_closes_ollama_stream(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert closed.is_set()
+
+
+def test_models_show_quantization_and_request_cpu(tmp_path):
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200,
+                json={
+                    "models": [
+                        {
+                            "name": "local/tm-law-4b:q4",
+                            "digest": "example",
+                            "size": 500,
+                            "details": {
+                                "format": "gguf",
+                                "family": "qwen35",
+                                "quantization_level": "Q4_K_M",
+                            },
+                        }
+                    ]
+                },
+            )
+        payload = json.loads(request.content)
+        assert payload["options"]["num_gpu"] == 0
+        return httpx.Response(200, text='{"done":true,"message":{"content":"Odpoveď"}}\n')
+
+    runtime = Ollama("http://127.0.0.1:11434", "local/tm-law-4b:q4", httpx.MockTransport(handler))
+    with TestClient(create_app(tmp_path, runtime), base_url="http://localhost") as client:
+        catalog = client.get("/api/models").json()
+        metadata = catalog["metadata"]["local/tm-law-4b:q4"]
+        assert metadata["quantization_level"] == "Q4_K_M" and metadata["disk_size_bytes"] == 500
+        assert metadata["experimental"] is True
+        response = client.post(
+            "/api/chat", json={"question": "Test CPU", "options": {"device": "cpu"}}
+        )
+        assert json.loads(response.text.splitlines()[-1])["model_metadata"] == metadata

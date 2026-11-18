@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "original_file": "synthetic.txt",
+  "version": {
+    "version_id": "synthetic-passage-package",
+    "title": "FIKTÍVNY text o návšteve budovy",
+    "kind": "predpis",
+    "authority": "Fiktívny správca",
+    "acquired_on": "2026-11-18",
+    "acquired_at": "2026-11-18T12:00:00+01:00",
+    "effective_from": "2024-01-01",
+    "effective_until": "2025-01-01",
+    "effective_basis": "Fiktívny testovací interval.",
+    "provenance": "Vlastný umelý regresný príklad.",
+    "reuse_terms": "MIT",
+    "fictional": true,
+    "original_sha256": "1f778b5dd10a5cecd893583381426a8a81068cc438bd51407663375963ece7db",
+    "passages": [
+      {
+        "source_id": "s-cl-1-o-1",
+        "section": "cl-1",
+        "paragraph": "1",
+        "text": "Návštevník si vyzdvihne fiktívnu kartu na recepcii."
+      },
+      {
+        "source_id": "s-cl-1-o-2",
+        "section": "cl-1",
+        "paragraph": "2",
+        "text": "Karta sa vráti pri odchode z fiktívnej budovy."
+      }
+    ]
+  }
+}

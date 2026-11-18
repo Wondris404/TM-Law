@@ -83,3 +83,14 @@ uv run --locked --offline --no-sync pytest -q -m ollama
 ```
 
 Kým neprebehne meranie na cieľovom zariadení, správanie modelu, spotreba RAM a plná offline prevádzka na ňom zostávajú neoverené. Pred prácou s klientskymi dokumentmi si prečítajte [bezpečnostné obmedzenia](SECURITY.md).
+
+## Opakovateľný benchmark jedného modelu
+
+Po príprave prostredia a spustení Ollamy môžete merať aj bez spusteného webového rozhrania:
+
+```powershell
+.\scripts\benchmark-windows.ps1 -Model qwen3.5:4b
+.\scripts\benchmark-windows.ps1 -Model qwen3.5:4b -Contexts 2048,4096 -Reasoning off,on -Repeats 2
+```
+
+Druhý príkaz má zmysel, ak model podporuje oba režimy. Štandardne sa požaduje CPU cez `num_gpu=0`. Pri `-Device auto` rozhoduje Ollama. Údaj o umiestnení pri bežnej otázke overte cez `ollama ps`. Výsledky sa ukladajú do `.tm-law/benchmarks`. Kontext 8 192 pridajte len po kontrole rezervy pamäte. Benchmark sťahovanie modelov nespúšťa.

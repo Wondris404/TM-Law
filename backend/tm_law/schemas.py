@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
@@ -22,6 +22,7 @@ class Passage(StrictModel):
     paragraph: Short | None = None
     letter: Short | None = None
     text: PassageText
+    norm_status: Literal["in_force", "repealed", "transitional", "unknown"] | None = None
 
 
 class LegalVersion(StrictModel):
@@ -33,12 +34,19 @@ class LegalVersion(StrictModel):
     authority: Short
     source_url: HttpUrl | None = None
     acquired_on: date
+    acquired_at: datetime | None = None
     published_on: date | None = None
+    valid_from: date | None = None
+    valid_until: date | None = None
     effective_from: date | None = None
     effective_until: date | None = None
+    effective_basis: Short | None = None
     open_ended: bool = False
     case_number: Short | None = None
     decision_date: date | None = None
+    decision_type: Short | None = None
+    publication_status: Literal["published", "anonymized", "unknown"] | None = None
+    cited_legislation: Annotated[list[Short], Field(max_length=100)] | None = None
     provenance: Short
     reuse_terms: Short
     fictional: bool = False
@@ -51,6 +59,12 @@ class LegalVersion(StrictModel):
             raise ValueError("Pre skutočný zdroj vyplňte zdrojovú URL.")
         if (self.law_number is None) != (self.law_year is None):
             raise ValueError("Číslo a rok predpisu zadajte spolu.")
+        if self.acquired_at and (
+            self.acquired_at.utcoffset() is None or self.acquired_at.date() != self.acquired_on
+        ):
+            raise ValueError("Čas získania musí obsahovať posun UTC a zhodný dátum získania.")
+        if self.valid_until and self.valid_from and self.valid_until <= self.valid_from:
+            raise ValueError("Koniec platnosti musí byť po začiatku.")
         if self.open_ended and (self.effective_from is None or self.effective_until is not None):
             raise ValueError("Otvorený interval vyžaduje začiatok a nemôže mať koniec.")
         if self.effective_until and (
@@ -71,6 +85,7 @@ class RuntimeOptions(StrictModel):
     max_tokens: Annotated[int, Field(ge=64, le=8192)] = 768
     reasoning: Reasoning = "auto"
     measure_memory: bool = False
+    device: Literal["auto", "cpu"] = "auto"
     seed: Annotated[int, Field(ge=0, le=2147483647)] | None = None
 
 

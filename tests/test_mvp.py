@@ -58,7 +58,7 @@ def test_import_is_atomic_versioned_and_idempotent(client, tmp_path):
     version["passages"].append(version["passages"][0])
     assert client.post("/api/legal/import", json=version).status_code == 422
     with sqlite3.connect(tmp_path / "legal.sqlite3") as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert conn.execute("SELECT count(*) FROM passage_fts").fetchone()[0] == 3
 

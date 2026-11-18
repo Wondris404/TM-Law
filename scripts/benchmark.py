@@ -17,7 +17,7 @@ from pydantic import Field, ValidationError
 from backend.tm_law.rag import answer
 from backend.tm_law.runtime import MockRuntime, Ollama
 from backend.tm_law.schemas import ChatInput, LegalVersion, RuntimeOptions, StrictModel
-from backend.tm_law.store import Store
+from backend.tm_law.store import SCHEMA_VERSION, Store
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,7 +38,7 @@ class BenchmarkCase(StrictModel):
 def read_cases(data: bytes):
     result = []
     ids = set()
-    for index, line in enumerate(data.decode("utf-8-sig").splitlines(), start=1):
+    for index, line in enumerate(data.decode("utf-8-sig").split("\n"), start=1):
         if not line.strip():
             continue
         try:
@@ -64,9 +64,10 @@ def snapshot_corpus(store: Store, source_dir: Path | None, simulated: bool) -> s
             closing(sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)) as src,
             closing(store.connect(store.legal)) as dst,
         ):
-            if src.execute("PRAGMA user_version").fetchone()[0] != 1:
+            if src.execute("PRAGMA user_version").fetchone()[0] not in {1, SCHEMA_VERSION}:
                 raise ValueError("Nepodporovaná schéma zdrojovej právnej databázy.")
             src.backup(dst)
+        store.initialize()
     elif simulated:
         for file in sorted((ROOT / "data").glob("demo-*.json")):
             store.import_version(LegalVersion.model_validate_json(file.read_bytes()))
@@ -138,6 +139,7 @@ async def run_case(store, runtime, task, options, repeat, include_answers=False)
         "evidence_status": result["evidence_status"],
         "reasoning": result["reasoning"],
         "model_digest": result["model_digest"],
+        "model_metadata": result["model_metadata"],
         **result["metrics"],
     }
 
@@ -151,6 +153,7 @@ def describe(rows):
     processes = [process for sample in memory for process in sample["processes"]]
     return {
         "median_seconds": statistic("seconds", median),
+        "median_load_seconds": statistic("ollama_load_seconds", median),
         "median_first_token_seconds": statistic("first_token_seconds", median),
         "median_tokens_per_second": statistic("tokens_per_second", median),
         "peak_backend_rss_bytes": max(
@@ -204,6 +207,7 @@ async def main(argv=None):
     parser.add_argument("--model", action="append", help="Installed Ollama tag; repeat to compare.")
     parser.add_argument("--context-window", type=int, action="append", help="Repeat to compare.")
     parser.add_argument("--reasoning", choices=("auto", "on", "off"), action="append")
+    parser.add_argument("--device", choices=("auto", "cpu"), default="auto")
     parser.add_argument("--temperature", type=float, default=0.15)
     parser.add_argument("--max-tokens", type=int, default=768)
     parser.add_argument("--repeats", type=int, default=1)
@@ -234,6 +238,7 @@ async def main(argv=None):
                         temperature=args.temperature,
                         max_tokens=args.max_tokens,
                         measure_memory=args.measure_memory,
+                        device=args.device,
                         seed=args.seed,
                     )
                     if options.max_tokens > options.context_window // 2:

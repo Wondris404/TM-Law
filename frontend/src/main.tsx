@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api, streamChat } from './api'
-import type { LocalDocument, Metrics, Reasoning, Result, Settings, Source } from './api'
+import type { LocalDocument, Metrics, ModelMetadata, Reasoning, Result, Settings, Source } from './api'
 import './style.css'
 
 const navigation = [
@@ -21,10 +21,11 @@ type Preferences = {
   maxTokens: number
   reasoning: Reasoning
   measureMemory: boolean
+  device: "auto" | "cpu"
 }
 const defaults: Preferences = {
   model: '', context: 4096, temperature: 0.15, maxTokens: 768,
-  reasoning: 'auto', measureMemory: false,
+  reasoning: 'auto', measureMemory: false, device: 'auto',
 }
 const reasoningLabels = { auto: 'Auto · podľa modelu', on: 'Zapnuté', off: 'Vypnuté' }
 
@@ -57,10 +58,12 @@ function SourceCard({ source, number }: { source: Source; number?: number }) {
     : 'Účinnosť neznáma'
   return <article className="source">
     {source.fictional && <span className="chip warning">Fiktívny zdroj</span>}
+    {source.norm_status === 'repealed' && <span className="chip warning">Zrušené ustanovenie</span>}
+    {source.norm_status === 'transitional' && <span className="chip warning">Prechodné ustanovenie</span>}
     <h3>{number !== undefined && `[${number}] `}{source.title}</h3>
     <p className="muted">{[
       source.law_number && `${source.law_number}/${source.law_year}`,
-      source.section && `§ ${source.section}`, source.paragraph && `ods. ${source.paragraph}`,
+      source.section && (source.section.startsWith('cl-') ? `Čl. ${source.section.slice(3)}` : `§ ${source.section}`), source.paragraph && `ods. ${source.paragraph}`,
       source.letter && `písm. ${source.letter}`, source.case_number, source.decision_date,
     ].filter(Boolean).join(' · ')}</p>
     <p className="excerpt">{source.text}</p>
@@ -111,6 +114,7 @@ function App() {
   const [settings, setSettings] = useState<Settings>()
   const [bootError, setBootError] = useState('')
   const [models, setModels] = useState<string[]>([])
+  const [metadata, setMetadata] = useState<Record<string, ModelMetadata>>({})
   const [modelIssue, setModelIssue] = useState('')
   const [prefs, setPrefs] = useState<Preferences>(() => ({ ...defaults, ...stored('tm-law-preferences', {}) }))
   const [history, setHistory] = useState<Turn[]>(() => stored('tm-law-history', []))
@@ -136,16 +140,20 @@ function App() {
   const [importing, setImporting] = useState(false)
   const controller = useRef<AbortController | null>(null)
   const latest = history.at(-1)
+  const selectedModel = prefs.model || settings?.default_model || ''
+  const modelInfo = metadata[selectedModel] ?? metadata[`${selectedModel}:latest`]
   const mode = settings?.simulated ? 'Testovací režim' : 'Lokálny režim'
 
   async function refreshModels() {
     setModelIssue('')
     try {
-      const result = await api<{ models: string[] }>('/models')
+      const result = await api<{ models: string[]; metadata?: Record<string, ModelMetadata> }>('/models')
       setModels(result.models)
+      setMetadata(result.metadata ?? {})
       if (!result.models.length) setModelIssue('V Ollame nie je nainštalovaný žiadny model.')
     } catch (error) {
       setModels([])
+      setMetadata({})
       setModelIssue(humanError(error))
     }
   }
@@ -188,6 +196,7 @@ function App() {
           model: prefs.model || null, context_window: prefs.context,
           temperature: prefs.temperature, max_tokens: prefs.maxTokens,
           reasoning: settings?.simulated ? 'auto' : prefs.reasoning, measure_memory: prefs.measureMemory,
+          device: prefs.device,
         },
       }, current.signal, (item) => {
         if (item.type === 'start') {
@@ -406,6 +415,16 @@ function App() {
           <option value="">Predvolený · {settings?.default_model ?? 'Ollama'}</option>
           {prefs.model && !models.includes(prefs.model) && <option>{prefs.model}</option>}
           {models.map((model) => <option key={model}>{model}</option>)}
+        </select></Field>
+        {modelInfo && <p className="muted note">{[
+          modelInfo.experimental ? 'Experimentálny TM-Law' : null,
+          modelInfo.family, modelInfo.parameter_size, modelInfo.quantization_level, modelInfo.format,
+          modelInfo.disk_size_bytes === null ? null : measured(modelInfo.disk_size_bytes / 1073741824, 'GiB na disku'),
+        ].filter(Boolean).join(' · ')}</p>}
+        <Field label="Výpočtové zariadenie"><select value={prefs.device} disabled={settings?.simulated}
+          onChange={(event) => setPrefs({ ...prefs, device: event.target.value as Preferences['device'] })}>
+          <option value="auto">Auto · podľa Ollamy</option>
+          <option value="cpu">Len CPU</option>
         </select></Field>
         <Field label="Uvažovanie"><select value={prefs.reasoning} disabled={settings?.simulated}
           onChange={(event) => setPrefs({ ...prefs, reasoning: event.target.value as Reasoning })}>

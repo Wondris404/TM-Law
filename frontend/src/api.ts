@@ -13,6 +13,8 @@ export type Source = {
   open_ended: boolean
   case_number: string | null
   decision_date: string | null
+  norm_status?: 'in_force' | 'repealed' | 'transitional' | 'unknown' | null
+  original_sha256?: string | null
   fictional: boolean
   version_id: string
   source_url: string | null
@@ -30,6 +32,16 @@ export type Settings = {
 }
 
 export type LocalDocument = { id: string; name: string }
+
+export type ModelMetadata = {
+  tag: string
+  family: string | null
+  parameter_size: string | null
+  quantization_level: string | null
+  format: string | null
+  disk_size_bytes: number | null
+  experimental: boolean
+}
 
 export type Reasoning = 'auto' | 'on' | 'off'
 

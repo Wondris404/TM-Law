@@ -1,4 +1,4 @@
-# TM-Law v0.1.1 · Thomas More Legal AI
+# TM-Law v0.1.2 · Thomas More Legal AI
 
 Lokálny právny asistent pre slovenských advokátov. MVP prepája právne vyhľadávanie v SQLite, porovnávanie dátumov účinnosti, streamovaný chat s lokálnou Ollamou a kontrolu citačných identifikátorov. Súkromné dokumenty spracúva na počítači používateľa.
 
