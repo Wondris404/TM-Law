@@ -66,6 +66,8 @@ export type Result = {
   answer: string
   citations: Source[]
   rejected: string[]
+  unsupported_mentions?: string[]
+  evidence_status?: string
   retrieved_ids?: string[]
   verified_ids?: string[]
   reasoning?: { requested: Reasoning; sent_to_ollama: boolean | string | null; thinking_observed: boolean }

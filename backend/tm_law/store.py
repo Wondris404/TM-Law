@@ -83,22 +83,37 @@ STOP_WORDS = frozenset(
 )
 
 
+def _citation_stem(part: str, *, include_paragraph: bool) -> str | None:
+    law = LAW_PATTERN.search(part)
+    section = SECTION_PATTERN.search(part)
+    if section is None:
+        return None
+    pieces = [match[0] for match in (law, section) if match]
+    if include_paragraph and (paragraph := PARAGRAPH_PATTERN.search(part)):
+        pieces.append(paragraph[0])
+    return " ".join(pieces)
+
+
 def separated_references(query: str) -> list[str] | None:
     """Return semicolon-separated explicit citations, or None when the query is ordinary text."""
     parts = [part.strip() for part in query.split(";") if part.strip()]
     if len(parts) < 2:
         return None
     parsed = []
-    previous_prefix = None
+    section_stem = None
+    letter_stem = None
     for part in parts:
-        if previous_prefix and PARAGRAPH_PATTERN.fullmatch(part):
-            part = f"{previous_prefix} {part}"
+        if section_stem and PARAGRAPH_PATTERN.fullmatch(part):
+            part = f"{section_stem} {part}"
+        elif letter_stem and LETTER_PATTERN.fullmatch(part):
+            part = f"{letter_stem} {part}"
         laws = list(LAW_PATTERN.finditer(part))
         sections = list(SECTION_PATTERN.finditer(part))
         if len(laws) > 1 or len(sections) > 1 or not (laws or sections):
             return None
         parsed.append((part, laws, sections))
-        previous_prefix = " ".join(match[0] for match in (*laws, *sections)) if sections else None
+        section_stem = _citation_stem(part, include_paragraph=False)
+        letter_stem = _citation_stem(part, include_paragraph=True)
     law_keys = {law.groups() for _, laws, _ in parsed for law in laws}
     if any(not laws and sections for _, laws, sections in parsed) and len(law_keys) != 1:
         return None

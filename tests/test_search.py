@@ -15,6 +15,10 @@ def test_semicolon_paragraph_continues_the_immediately_preceding_section():
         "71/1967 § 54 ods. 1",
         "71/1967 § 54 ods. 2",
     ]
+    assert separated_references("36/2005 § 8 ods. 2 písm. a; písm. b") == [
+        "36/2005 § 8 ods. 2 písm. a",
+        "36/2005 § 8 ods. 2 písm. b",
+    ]
     assert separated_references("71/1967; ods. 2") is None
     assert separated_references("71/1967 § 54 ods. 1; ods. 2 je nejasný") is None
 
@@ -162,6 +166,8 @@ def test_letter_narrows_the_paragraph(tmp_path):
     )
     hits = store.search("9999/2099 § 8 ods. 2 písm. b", as_of=date(2024, 6, 1))
     assert [hit["citation_id"] for hit in hits] == ["letters/p8-b"]
+    both = store.search("9999/2099 § 8 ods. 2 písm. a; písm. b", as_of=date(2024, 6, 1), limit=2)
+    assert [hit["citation_id"] for hit in both] == ["letters/p8-a", "letters/p8-b"]
 
 
 def test_ordinary_words_are_not_parsed_as_articles():

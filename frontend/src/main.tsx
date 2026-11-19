@@ -337,6 +337,7 @@ function App() {
               </p>}
               {turn.result.metrics && <Performance metrics={turn.result.metrics} simulated={turn.simulated} />}
               {turn.result.rejected.length > 0 && <p className="alert">Neoverené odkazy: {turn.result.rejected.length}</p>}
+              {!!turn.result.unsupported_mentions?.length && <p className="alert">Nepodložené označenia: {turn.result.unsupported_mentions.join(', ')}</p>}
               {index < history.length - 1 && turn.result.citations.length > 0 && <details>
                 <summary>Zdroje odpovede</summary>
                 {turn.result.citations.map((source, i) => <SourceCard source={source} number={i + 1} key={source.citation_id} />)}
@@ -378,6 +379,7 @@ function App() {
         </section>
         <aside className="panel evidence" aria-label="Použité zdroje">
           <div className="panel-top"><h2>Použité zdroje</h2><span className="chip">{latest?.result.citations.length ?? 0}</span></div>
+          {!!latest?.result.unsupported_mentions?.length && <p className="alert">Nepodložené označenia: {latest.result.unsupported_mentions.join(', ')}</p>}
           {latest?.result.citations.length
             ? latest.result.citations.map((source, i) => <SourceCard key={source.citation_id} number={i + 1} source={source} />)
             : <p className="muted">Tu sa zobrazia odkazy z dokončenej odpovede, ktoré prešli kontrolou identifikátora.</p>}
