@@ -206,7 +206,40 @@ class ScriptedRuntime:
     async def stream(self, messages, options):
         if options.model and options.model != self.default_model:
             raise RuntimeUnavailable("V testovacom režime je dostupný iba tm-law-mock.")
+        self.messages = messages
         yield Chunk(self.text)
+
+
+def test_chat_passes_legal_skill_and_decision_metadata_to_the_model(tmp_path):
+    runtime = ScriptedRuntime("Ukážkový záver [S1].")
+    decision = fixture(2024)
+    decision.update(
+        title="FIKTÍVNE ROZHODNUTIE · evidencia dielne",
+        kind="rozhodnutie",
+        case_number="1S/1/2099",
+        decision_date="2024-01-01",
+        decision_type="rozsudok",
+        publication_status="unknown",
+        law_number=None,
+        law_year=None,
+        effective_from=None,
+        open_ended=False,
+    )
+    with TestClient(create_app(tmp_path, runtime), base_url="http://127.0.0.1") as client:
+        assert client.post("/api/legal/import", json=decision).status_code == 201
+        response = client.post("/api/chat", json={"question": "evidencia dielne"})
+
+    done = json.loads(response.text.splitlines()[-1])
+    assert done["verified_ids"] == ["demo-2024/p7-1"]
+    system_message, user_message = runtime.messages
+    assert system_message["role"] == "system"
+    rules = ROOT / ".agents/skills/slovak-law/references/runtime.md"
+    assert system_message["content"].endswith(rules.read_text(encoding="utf-8").strip())
+    (source,) = json.loads(user_message["content"])["sources"]
+    assert source["kind"] == "rozhodnutie"
+    assert source["authority"] == decision["authority"]
+    assert source["case_number"] == decision["case_number"]
+    assert source["decision_date"] == decision["decision_date"]
 
 
 def test_unmarked_statute_and_document_instruction(tmp_path):
