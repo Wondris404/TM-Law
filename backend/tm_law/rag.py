@@ -3,6 +3,7 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import aclosing, nullcontext
 from datetime import date
+from itertools import zip_longest
 from pathlib import Path
 from time import perf_counter
 
@@ -10,6 +11,7 @@ from .performance import MemorySampler
 from .runtime import Chunk, ModelRuntime, Ollama, RuntimeUnavailable
 from .schemas import ChatInput
 from .store import Store
+from .web_research import WebResearch
 
 STATUTE_MENTION = re.compile(
     r"§\s*\d+[a-z]?(?!\w)"
@@ -30,6 +32,11 @@ REFERENCE = re.compile(
 )
 SKILL_RULES_PATH = (
     Path(__file__).resolve().parents[2] / ".agents/skills/slovak-law/references/runtime.md"
+)
+WEB_RULES = (
+    (Path(__file__).resolve().parents[2] / ".agents/skills/web-research/references/runtime.md")
+    .read_text(encoding="utf-8")
+    .strip()
 )
 SYSTEM = f"""Si právny výskumný asistent pre slovenských advokátov. Odpovedaj po slovensky.
 Na jednoduchú otázku odpovedz priamo v niekoľkých vetách. Pri zložitej otázke začni záverom
@@ -70,6 +77,14 @@ def _cited_labels(sources: list[dict]) -> tuple[set[tuple[int, int]], set[str], 
     sections = set()
     articles = set()
     for source in sources:
+        if source.get("kind") == "web":
+            laws.update((int(m[1]), int(m[2])) for m in LAW_MENTION.finditer(source["text"]))
+            for match in STATUTE_MENTION.finditer(source["text"]):
+                label = match[0].casefold()
+                if label.startswith("§"):
+                    sections.add(label[1:].strip())
+                else:
+                    articles.add(re.sub(r"^(?:článok|čl\.)\s*", "", label).strip())
         if source.get("law_number") and source.get("law_year"):
             laws.add((int(source["law_number"]), int(source["law_year"])))
         section = (source.get("section") or "").casefold()
@@ -159,14 +174,18 @@ def conflicting_versions(sources: list[dict]) -> list[list[str]]:
 
 
 async def answer(
-    store: Store, runtime: ModelRuntime, request: ChatInput, document: dict | None
+    store: Store,
+    runtime: ModelRuntime,
+    request: ChatInput,
+    document: dict | None,
+    web_research: WebResearch | None = None,
 ) -> AsyncIterator[dict]:
     sampler = None
     if request.options.measure_memory:
         sampler = MemorySampler(runtime.url if isinstance(runtime, Ollama) else None)
     async with (
         sampler or nullcontext(),
-        aclosing(_answer(store, runtime, request, document)) as events,
+        aclosing(_answer(store, runtime, request, document, web_research)) as events,
     ):
         async for event in events:
             if sampler and "metrics" in event:
@@ -175,7 +194,11 @@ async def answer(
 
 
 async def _answer(
-    store: Store, runtime: ModelRuntime, request: ChatInput, document: dict | None
+    store: Store,
+    runtime: ModelRuntime,
+    request: ChatInput,
+    document: dict | None,
+    web_research: WebResearch | None,
 ) -> AsyncIterator[dict]:
     started = perf_counter()
     query = request.query or request.question
@@ -204,13 +227,18 @@ async def _answer(
         )
     ):
         missing_date = True
-    if missing_date:
+    if missing_date and request.web is None:
         yield {
             "type": "error",
             "message": "Na výber historického znenia zadajte jeden presný rozhodujúci dátum.",
             "code": "invalid_decisive_date",
         }
         return
+    if missing_date:
+        notes.append(
+            "Pri viacerých alebo neúplných dátumoch zadajte presný rozhodujúci dátum "
+            "pre výber historického znenia z lokálneho korpusu."
+        )
     sources = store.search(query, as_of=as_of, limit=8, include_fictional=runtime.simulated)
     if not sources:
         notes.append(
@@ -229,12 +257,25 @@ async def _answer(
     if any(source["fictional"] for source in sources):
         notes.append("Výsledky zahŕňajú výslovne fiktívne testovacie zdroje.")
 
-    budget = max(650, (request.options.context_window - request.options.max_tokens - 650) * 2)
+    budget = (request.options.context_window - request.options.max_tokens - 650) * 2
+    if request.web is not None:
+        budget -= len(WEB_RULES) + 2
+    budget = max(650, budget)
     question = request.question
     if len(question) > budget // 2:
         yield {"type": "error", "message": "Otázka je pre zvolený kontext príliš dlhá."}
         return
     budget -= len(question)
+    if request.web is not None and web_research is not None:
+        yield {"type": "research"}
+        web_sources, web_notes = await web_research.run(request.web, focus=question)
+        notes.extend(web_notes)
+        if web_sources:
+            notes.append(
+                "Webové podklady sú verejné výrezy načítané počas rešerše. "
+                "Rozhodujúci dátum filtruje lokálny korpus."
+            )
+            sources = [item for pair in zip_longest(web_sources, sources) for item in pair if item]
     raw_excerpt = document_excerpt(document["text"], query, budget // 2) if document else None
     excerpt, excerpt_markers = quarantine_markers(raw_excerpt) if raw_excerpt else (None, False)
     evidence = []
@@ -258,10 +299,14 @@ async def _answer(
         aliases[alias] = source["citation_id"]
         visible_body, body_markers = quarantine_markers(body)
         source_markers = source_markers or body_markers
+        title = source["title"]
+        if source["kind"] == "web":
+            title, title_markers = quarantine_markers(title)
+            source_markers = source_markers or title_markers
         context_source = {
             "id": source["citation_id"],
             "marker": f"[{alias}]",
-            "title": source["title"],
+            "title": title,
             "kind": source["kind"],
             "section": source["section"],
             "paragraph": source["paragraph"],
@@ -277,6 +322,10 @@ async def _answer(
                 authority=source["authority"],
                 case_number=source["case_number"],
                 decision_date=source["decision_date"],
+            )
+        if source["kind"] == "web":
+            context_source.update(
+                authority=source["authority"], retrieved_at=source["retrieved_at"]
             )
         evidence.append(context_source)
         passage_texts.append(body)
@@ -323,8 +372,9 @@ async def _answer(
         "evidence_status": evidence_status,
         "document": excerpt,
     }
+    system_prompt = SYSTEM + "\n\n" + WEB_RULES if request.web is not None else SYSTEM
     messages = [
-        {"role": "system", "content": SYSTEM},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
     ]
     chunks = []

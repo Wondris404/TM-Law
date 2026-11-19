@@ -20,15 +20,21 @@ from .rag import answer
 from .runtime import MockRuntime, ModelRuntime, Ollama, RuntimeUnavailable, parse_ollama_threads
 from .schemas import ChatInput, Kind, LegalVersion
 from .store import Store
+from .web_research import WebResearch
 
 LOOPBACK_HOST = re.compile(r"^(?:127\.0\.0\.1|localhost|\[::1\])(?::[0-9]{1,5})?$")
 BUILD = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 DEFAULT_MODEL = "abliterant/qwen3.5-rana:9b"
 
 
-def create_app(directory: Path | None = None, runtime: ModelRuntime | None = None) -> FastAPI:
+def create_app(
+    directory: Path | None = None,
+    runtime: ModelRuntime | None = None,
+    web_research: WebResearch | None = None,
+) -> FastAPI:
     directory = directory or Path(os.getenv("TM_LAW_DATA_DIR", ".tm-law")).expanduser()
     store = Store(directory)
+    web_research = web_research or WebResearch(os.getenv("TM_LAW_BRAVE_SEARCH_API_KEY", ""))
     if runtime is None:
         adapter = os.getenv("TM_LAW_ADAPTER", "ollama")
         if adapter == "mock":
@@ -93,6 +99,7 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
             "runtime_url": runtime.url if isinstance(runtime, Ollama) else None,
             "data_directory": str(store.directory.resolve()),
             "peak_ram_bytes": None,
+            "web_text_search": bool(web_research.brave_key),
         }
 
     @app.get("/api/models")
@@ -201,7 +208,7 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
             raise HTTPException(422, str(exc)) from exc
 
         async def stream():
-            async with aclosing(answer(store, runtime, request, document)) as events:
+            async with aclosing(answer(store, runtime, request, document, web_research)) as events:
                 async for event in events:
                     yield json.dumps(event, ensure_ascii=False) + "\n"
 

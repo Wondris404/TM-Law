@@ -21,6 +21,7 @@ export type Source = {
   version_id: string
   source_url: string | null
   text: string
+  retrieved_at?: string
 }
 
 export type Settings = {
@@ -31,7 +32,10 @@ export type Settings = {
   data_directory: string
   language: string
   peak_ram_bytes: number | null
+  web_text_search?: boolean
 }
+
+export type WebScope = 'all' | 'law' | 'business' | 'economy'
 
 export type LocalDocument = { id: string; name: string }
 
@@ -76,6 +80,7 @@ export type Result = {
 }
 
 export type Event = Result
+  | { type: 'research' }
   | { type: 'start'; simulated: boolean; notes: string[]; evidence_status: string }
   | { type: 'thinking' }
   | { type: 'delta'; text: string }

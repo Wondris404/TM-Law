@@ -96,6 +96,11 @@ class RuntimeOptions(StrictModel):
     cpu_threads: Annotated[int, Field(ge=1, le=OLLAMA_THREAD_LIMIT)] | None = None
 
 
+class WebResearchInput(StrictModel):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=400)]
+    scope: Literal["all", "law", "business", "economy"] = "all"
+
+
 class ChatInput(StrictModel):
     question: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=3, max_length=4000)
@@ -107,6 +112,7 @@ class ChatInput(StrictModel):
     as_of: date | None = None
     document_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")] | None = None
     options: RuntimeOptions = Field(default_factory=RuntimeOptions)
+    web: WebResearchInput | None = None
 
     @model_validator(mode="after")
     def context_budget(self):

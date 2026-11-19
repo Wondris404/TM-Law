@@ -49,4 +49,6 @@ MVP podporuje TXT, PDF s textovou vrstvou a DOCX. Históriu si prehliadač pamä
 
 [Slovenské právo (`$slovak-law`)](.agents/skills/slovak-law/SKILL.md) obsahuje rešeršné postupy pre Codex, mapu oficiálnych prameňov a postup dopĺňania korpusu. Chat TM-Law načítava krátke pravidlá skillu pri štarte backendu. Právne odpovede ďalej závisia od časových znení a rozhodnutí importovaných do lokálnej databázy.
 
+[Webová rešerš (`$web-research`)](.agents/skills/web-research/SKILL.md) vyhľadáva verejné právne, firemné a ekonomické zdroje. V chate ju zapnete zvlášť pre konkrétnu otázku. Podľa IČO a priameho verejného odkazu funguje bez kľúča. [Nastavenie textového vyhľadávania a príklady](docs/WEB_RESEARCH.md).
+
 [Architektúra](docs/ARCHITECTURE.md) · [Modely](docs/MODELS.md) · [Bezpečnosť](docs/SECURITY.md) · [Benchmarky](docs/BENCHMARKS.md) · [Merania v0.1.2](docs/PERFORMANCE_v0.1.2.md) · [Tréning](docs/TRAINING.md) · [Výskum](docs/RESEARCH.md) · [Ďalšie kroky](docs/ROADMAP.md) · [Poznámky k v0.1.1](docs/RELEASE_0.1.1.md)

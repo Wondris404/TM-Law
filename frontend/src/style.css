@@ -82,6 +82,10 @@ main { padding: 28px clamp(16px, 4vw, 54px); max-width: 1600px; width: 100%; mar
 .question { justify-self: end; background: var(--soft); padding: 8px 12px; border-radius: 9px; color: var(--text); }
 .question, .answer, .excerpt { white-space: pre-wrap; overflow-wrap: anywhere; }
 .composer { display: grid; gap: 12px; }
+.web-toggle { display: flex; gap: 8px; align-items: center; width: fit-content; }
+.web-toggle input { width: auto; accent-color: var(--accent); }
+.web-fields { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; }
+.web-fields .form-row > .field:first-child { flex-grow: 3; }
 .form-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
 .form-row > .field { flex: 1 1 140px; min-width: 0; }
 .field { display: grid; gap: 5px; font-size: .85rem; color: var(--muted); }

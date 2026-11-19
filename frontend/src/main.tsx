@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api, streamChat } from './api'
-import type { LocalDocument, Metrics, ModelMetadata, Reasoning, Result, Settings, Source } from './api'
+import type { LocalDocument, Metrics, ModelMetadata, Reasoning, Result, Settings, Source, WebScope } from './api'
 import { persistentHistory, rememberTurn } from './sessionHistory'
 import './style.css'
 
@@ -52,6 +52,13 @@ function humanError(error: unknown) {
 }
 
 function SourceCard({ source, number }: { source: Source; number?: number }) {
+  if (source.kind === 'web') return <article className="source">
+    <span className="chip">Verejný web</span>
+    <h3>{number !== undefined && `[${number}] `}{source.title}</h3>
+    <p className="excerpt">{source.text}{source.context_truncated ? ' […]' : ''}</p>
+    <small>{source.authority}{source.retrieved_at && ` · Získané ${new Date(source.retrieved_at).toLocaleString('sk-SK')}`}</small>
+    {source.source_url && <a href={source.source_url} target="_blank" rel="noopener noreferrer">Otvoriť webový zdroj ↗</a>}
+  </article>
   const interval = source.effective_from
     ? `${source.effective_from} → ${source.effective_until
       ? `${source.effective_until} (bez tohto dňa)`
@@ -127,6 +134,10 @@ function App() {
   const [question, setQuestion] = useState('')
   const [chatDate, setChatDate] = useState('')
   const [chatQuery, setChatQuery] = useState('')
+  const [webEnabled, setWebEnabled] = useState(false)
+  const [webQuery, setWebQuery] = useState('')
+  const [webScope, setWebScope] = useState<WebScope>('all')
+  const [researching, setResearching] = useState(false)
   const [pending, setPending] = useState('')
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -185,7 +196,7 @@ function App() {
 
   async function submitChat(event: FormEvent) {
     event.preventDefault()
-    if (controller.current || question.trim().length < 3) return
+    if (controller.current || question.trim().length < 3 || (webEnabled && webQuery.trim().length < 3)) return
     const attached = Boolean(doc)
     const current = new AbortController()
     controller.current = current
@@ -193,11 +204,13 @@ function App() {
     setDraft('')
     setChatError('')
     setThinking(false)
+    setResearching(webEnabled)
     setPendingWarning('')
     let simulated = Boolean(settings?.simulated)
     try {
       await streamChat({
         question, query: chatQuery.trim() || null, as_of: chatDate || null, document_id: doc || null,
+        ...(webEnabled ? { web: { query: webQuery.trim(), scope: webScope } } : {}),
         options: {
           model: prefs.model || null, context_window: prefs.context,
           temperature: prefs.temperature, max_tokens: prefs.maxTokens,
@@ -205,7 +218,9 @@ function App() {
           device: prefs.device,
         },
       }, current.signal, (item) => {
+        if (item.type === 'research') setResearching(true)
         if (item.type === 'start') {
+          setResearching(false)
           simulated = item.simulated
           if (item.evidence_status === 'insufficient') setPendingWarning('Chýba právny podklad.')
           if (item.evidence_status === 'version_conflict') setPendingWarning('Nájdené znenia sa líšia.')
@@ -217,6 +232,8 @@ function App() {
             question, simulated, result: item, ...(attached ? { privateDocument: true } : {}),
           }))
           setQuestion('')
+          setWebEnabled(false)
+          setWebQuery('')
         }
       })
     } catch (error) {
@@ -225,6 +242,7 @@ function App() {
       controller.current = null
       setPending('')
       setDraft('')
+      setResearching(false)
     }
   }
 
@@ -346,7 +364,7 @@ function App() {
             {pending && <article className="turn">
               <p className="question">{pending}</p>
               <small className="muted" role="status">
-                {thinking && !draft ? 'Model uvažuje…' : 'Generujem · citácie čakajú na kontrolu'}
+                {researching ? 'Čítam verejné zdroje…' : thinking && !draft ? 'Model uvažuje…' : 'Generujem · citácie čakajú na kontrolu'}
               </small>
               {pendingWarning && <p className="alert">{pendingWarning}</p>}
               <p className="answer">{draft}</p>
@@ -356,6 +374,22 @@ function App() {
           <form className="composer" onSubmit={submitChat}>
             <Field label="Právna otázka"><textarea value={question} onChange={(event) => setQuestion(event.target.value)}
               rows={3} minLength={3} maxLength={4000} placeholder="Napíšte svoju otázku…" required /></Field>
+            <label className="web-toggle"><input type="checkbox" checked={webEnabled} disabled={Boolean(pending)}
+              onChange={(event) => setWebEnabled(event.target.checked)} /> Webová rešerš</label>
+            {webEnabled && <div className="web-fields">
+              <div className="form-row">
+                <Field label="Verejný dopyt"><input value={webQuery} minLength={3} maxLength={400} required
+                  disabled={Boolean(pending)} placeholder="Téma, IČO alebo https://…"
+                  aria-describedby="web-query-help" onChange={(event) => setWebQuery(event.target.value)} /></Field>
+                <Field label="Oblasť vyhľadávania"><select value={webScope} disabled={Boolean(pending)}
+                  onChange={(event) => setWebScope(event.target.value as WebScope)}>
+                  <option value="all">Všetky oblasti</option><option value="law">Právo</option>
+                  <option value="business">Firmy a registre</option><option value="economy">Ekonomika</option>
+                </select></Field>
+              </div>
+              <p className="muted note" id="web-query-help">Na web sa posiela verejný dopyt. Otázka a dokument ostávajú v TM-Law.
+                {settings && !settings.web_text_search && ' Bez kľúča Brave Search zadajte IČO alebo odkaz na podporovaný portál.'}</p>
+            </div>}
             <div className="form-row">
               <Field label="Rozhodujúci dátum"><input type="date" value={chatDate} onChange={(event) => setChatDate(event.target.value)} /></Field>
               <Field label="Súkromný dokument"><select value={doc} onChange={(event) => setDoc(event.target.value)}>
@@ -368,7 +402,7 @@ function App() {
                   event.preventDefault()
                   controller.current?.abort()
                 }}>Zastaviť</button>
-                : <button key="send" type="submit" className="primary" disabled={question.trim().length < 3}>Odoslať ↑</button>}
+                : <button key="send" type="submit" className="primary" disabled={question.trim().length < 3 || (webEnabled && webQuery.trim().length < 3)}>Odoslať ↑</button>}
             </div>
             <details><summary>Spresniť vyhľadávanie</summary>
               <Field label="Hľadané výrazy, číslo predpisu alebo paragraf">

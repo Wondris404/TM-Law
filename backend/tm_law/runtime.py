@@ -304,7 +304,10 @@ class MockRuntime:
         refs = evidence["sources"]
         yield Chunk("Testovacia odpoveď · simulácia. ")
         if refs:
-            yield Chunk(f"Lokálny index našiel zdroj [[{refs[0]['id']}]].")
+            method = (
+                "Webová rešerš našla" if refs[0].get("kind") == "web" else "Lokálny index našiel"
+            )
+            yield Chunk(f"{method} zdroj [[{refs[0]['id']}]].")
         else:
             yield Chunk("K otázke sa nenašiel právny zdroj.")
         if evidence.get("document"):
