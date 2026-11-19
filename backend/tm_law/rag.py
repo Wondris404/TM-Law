@@ -15,6 +15,7 @@ STATUTE_MENTION = re.compile(
     r"|\b(?:článok|čl\.)\s*(?:[IVXLCDM]{1,8}|\d+[a-z]?)(?!\w)",
     re.IGNORECASE,
 )
+LAW_MENTION = re.compile(r"(?<!\w)(\d{1,8})\s*/\s*(\d{4})(?!\w)")
 INJECTION_HINT = re.compile(
     r"ignoruj\s+(?:všetky\s+|vsetky\s+)?(?:predch[aá]dzaj[uú]ce|predosl[eé])"
     r"|ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions"
@@ -64,13 +65,45 @@ def validate_citations(
     return cleaned, list(confirmed.values()), list(rejected)
 
 
-def unmarked_legal_mentions(text: str) -> list[str]:
-    """Statute-like phrases left in the answer after citation markers are resolved."""
+def _cited_labels(sources: list[dict]) -> tuple[set[tuple[int, int]], set[str], set[str]]:
+    laws = set()
+    sections = set()
+    articles = set()
+    for source in sources:
+        if source.get("law_number") and source.get("law_year"):
+            laws.add((int(source["law_number"]), int(source["law_year"])))
+        section = (source.get("section") or "").casefold()
+        if section.startswith("cl-"):
+            articles.add(section.removeprefix("cl-"))
+        elif section:
+            sections.add(section)
+    return laws, sections, articles
+
+
+def unmarked_legal_mentions(text: str, sources: list[dict] | None = None) -> list[str]:
+    """Statute-like phrases that do not match a citation accepted in this answer."""
+    laws, sections, articles = _cited_labels(sources or [])
     found = []
-    for match in STATUTE_MENTION.finditer(text):
-        token = " ".join(match.group(0).split())
+
+    def add(token: str):
         if token not in found:
             found.append(token)
+
+    for match in STATUTE_MENTION.finditer(text):
+        token = " ".join(match.group(0).split())
+        if token.startswith("§"):
+            label = token[1:].strip().casefold()
+            if label in sections:
+                continue
+        else:
+            label = re.sub(r"(?i)^(?:článok|čl\.)\s*", "", token).strip().casefold()
+            if label in articles:
+                continue
+        add(token)
+    for match in LAW_MENTION.finditer(text):
+        pair = (int(match[1]), int(match[2]))
+        if pair not in laws:
+            add(f"{pair[0]}/{pair[1]}")
     return found
 
 
@@ -310,7 +343,7 @@ async def _answer(
         for source, body in zip(used_sources, passage_texts, strict=True)
     ]
     text, citations, rejected = validate_citations("".join(chunks), citation_context, aliases)
-    unsupported = unmarked_legal_mentions(text)
+    unsupported = unmarked_legal_mentions(text, citations)
     if unsupported:
         notes.append(
             "Odpoveď uvádza číslo ustanovenia mimo overeného odkazu. "

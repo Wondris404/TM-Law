@@ -94,6 +94,9 @@ def deterministic_checks(case: BenchmarkCase, result: dict) -> dict:
         "no_citations_when_evidence_missing": not cited
         if case.expected_evidence == "insufficient"
         else None,
+        "no_unmarked_legal_mentions": not result["unsupported_mentions"]
+        if "unsupported_mentions" in result
+        else None,
     }
 
 

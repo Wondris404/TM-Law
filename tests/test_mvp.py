@@ -211,6 +211,12 @@ class ScriptedRuntime:
 
 def test_unmarked_statute_and_document_instruction(tmp_path):
     assert unmarked_legal_mentions("Podľa [1] a § 420 aj Čl. 7.") == ["§ 420", "Čl. 7"]
+    cited = [
+        {"law_number": 36, "law_year": 2005, "section": "7"},
+        {"law_number": 460, "law_year": 1992, "section": "cl-7"},
+    ]
+    assert unmarked_legal_mentions("Platí § 7 zákona 36/2005 a Čl. 7 ústavy 460/1992.", cited) == []
+    assert unmarked_legal_mentions("Platí § 7, ale odkazuje na 40/1964.", cited[:1]) == ["40/1964"]
     with TestClient(
         create_app(tmp_path, ScriptedRuntime("Bez odkazu platí § 420.")),
         base_url="http://127.0.0.1",

@@ -22,6 +22,7 @@ def test_starter_dataset_and_historical_citation_trap():
         "cited_ids": ["demo-2024/p7-1"],
         "rejected": ["demo-2024/p7-1"],
         "evidence_status": "available",
+        "unsupported_mentions": ["40/1964"],
     }
     checks = deterministic_checks(past, wrong)
     assert checks["retrieval_covers_expected"]
@@ -29,6 +30,9 @@ def test_starter_dataset_and_historical_citation_trap():
     assert not checks["expected_ids_verified"]
     assert not checks["forbidden_ids_absent"]
     assert not checks["historical_ids_match"]
+    assert checks["no_unmarked_legal_mentions"] is False
+    clean = deterministic_checks(past, wrong | {"unsupported_mentions": []})
+    assert clean["no_unmarked_legal_mentions"] is True
 
 
 def test_family_law_benchmark_separates_scenarios_and_source_provenance():

@@ -132,6 +132,38 @@ def test_article_word_matches_stored_abbreviation(tmp_path):
     assert [hit["citation_id"] for hit in both] == ["article/a1", "article/a2"]
 
 
+def test_letter_narrows_the_paragraph(tmp_path):
+    store = Store(tmp_path)
+    store.initialize()
+    store.import_version(
+        version(
+            "letters",
+            9999,
+            2099,
+            date(2024, 1, 1),
+            date(2025, 1, 1),
+            [
+                {
+                    "source_id": "p8-b",
+                    "section": "8",
+                    "paragraph": "2",
+                    "letter": "b",
+                    "text": "Písmeno b o vyhlásení.",
+                },
+                {
+                    "source_id": "p8-a",
+                    "section": "8",
+                    "paragraph": "2",
+                    "letter": "a",
+                    "text": "Písmeno a o splnomocnení.",
+                },
+            ],
+        )
+    )
+    hits = store.search("9999/2099 § 8 ods. 2 písm. b", as_of=date(2024, 6, 1))
+    assert [hit["citation_id"] for hit in hits] == ["letters/p8-b"]
+
+
 def test_ordinary_words_are_not_parsed_as_articles():
     prose = (
         "článok civilného procesného práva",
