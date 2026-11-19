@@ -8,8 +8,15 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from tm_law.api import create_app
-from tm_law.rag import answer
-from tm_law.runtime import MODEL_ERROR, Ollama, RuntimeUnavailable, loopback_url
+from tm_law.rag import SYSTEM, answer, validate_citations
+from tm_law.runtime import (
+    MODEL_ERROR,
+    MockRuntime,
+    Ollama,
+    RuntimeUnavailable,
+    loopback_url,
+    parse_ollama_threads,
+)
 from tm_law.schemas import ChatInput, RuntimeOptions
 from tm_law.store import Store
 
@@ -312,3 +319,113 @@ def test_models_show_quantization_and_request_cpu(tmp_path):
             "/api/chat", json={"question": "Test CPU", "options": {"device": "cpu"}}
         )
         assert json.loads(response.text.splitlines()[-1])["model_metadata"] == metadata
+
+
+def test_parse_ollama_threads_accepts_only_the_supported_range():
+    assert parse_ollama_threads(None) is None
+    assert parse_ollama_threads("  ") is None
+    assert parse_ollama_threads(" 2 ") == 2
+    assert parse_ollama_threads("256") == 256
+    for raw in ("0", "257", "1000", "1.5", "nope"):
+        with pytest.raises(ValueError, match="1"):
+            parse_ollama_threads(raw)
+
+
+@pytest.mark.asyncio
+async def test_ollama_sends_num_thread_only_when_configured():
+    payloads = []
+
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "qwen3.5:4b"}]})
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, text='{"done":true,"message":{"content":"Odpoveď"}}\n')
+
+    runtime = Ollama("http://127.0.0.1:11434", "qwen3.5:4b", httpx.MockTransport(handler))
+    messages = [{"role": "user", "content": "Test"}]
+    async for _ in runtime.stream(messages, RuntimeOptions()):
+        pass
+    async for _ in runtime.stream(messages, RuntimeOptions(cpu_threads=2, device="cpu")):
+        pass
+    assert "num_thread" not in payloads[0]["options"]
+    assert payloads[1]["options"]["num_thread"] == 2
+    assert payloads[1]["options"]["num_gpu"] == 0
+    assert payloads[0]["options"]["num_ctx"] == 4096
+
+
+def test_api_thread_env_and_rag_marker_keep_strict_citations(tmp_path, monkeypatch):
+    monkeypatch.delenv("TM_LAW_OLLAMA_NUM_THREADS", raising=False)
+    payloads = []
+
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "qwen3.5:4b"}]})
+        assert request.url.path == "/api/chat"
+        payloads.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            text='{"message":{"content":"Zdroj [[demo-2022/p7-1]]."},"done":false}\n'
+            '{"done":true,"eval_count":4,"eval_duration":1000000000}\n',
+        )
+
+    runtime = Ollama("http://127.0.0.1:11434", "qwen3.5:4b", httpx.MockTransport(handler))
+    question = {
+        "question": "Ako dlho sa uchováva evidencia dielne?",
+        "query": "9999/2099 § 7 evidencia",
+    }
+    version = legal_fixture(2022)
+    version["fictional"] = False
+    version["source_url"] = "https://example.com/demo-2022"
+    with TestClient(create_app(tmp_path, runtime), base_url="http://127.0.0.1") as client:
+        assert client.post("/api/legal/import", json=version).status_code == 201
+        done = json.loads(client.post("/api/chat", json=question).text.splitlines()[-1])
+        assert done["citations"][0]["citation_id"] == "demo-2022/p7-1"
+        assert done["rejected"] == []
+        user = json.loads(payloads[-1]["messages"][-1]["content"])
+        assert payloads[-1]["messages"][0]["content"] == SYSTEM
+        assert "nepridávaj pred identifikátor žiadny prefix" in SYSTEM
+        assert any(source["id"] == "demo-2022/p7-1" for source in user["sources"])
+        assert all(
+            source["marker"] == f"[[{source['id']}]]" and not str(source["id"]).startswith("id:")
+            for source in user["sources"]
+        )
+        assert "num_thread" not in payloads[-1]["options"]
+
+        monkeypatch.setenv("TM_LAW_OLLAMA_NUM_THREADS", "2")
+        client.post("/api/chat", json=question)
+        assert payloads[-1]["options"]["num_thread"] == 2
+
+        monkeypatch.setenv("TM_LAW_OLLAMA_NUM_THREADS", "nope")
+        explicit = client.post("/api/chat", json={**question, "options": {"cpu_threads": 1}})
+        assert explicit.status_code == 200
+        assert payloads[-1]["options"]["num_thread"] == 1
+        before_invalid = len(payloads)
+        invalid_env = client.post("/api/chat", json=question)
+        assert invalid_env.status_code == 422 and "vlákien" in invalid_env.text
+        assert len(payloads) == before_invalid
+        for invalid in (0, 257):
+            rejected = client.post(
+                "/api/chat", json={**question, "options": {"cpu_threads": invalid}}
+            )
+            assert rejected.status_code == 422
+
+    bare = "sk-zz-1992-460-20250101/ustavnyclanok-1.odsek-1"
+    sources = [{"citation_id": bare}]
+    copied, valid, rejected = validate_citations(f"[[{bare}]]", sources)
+    assert rejected == [] and valid[0]["citation_id"] == bare and copied == "[1]"
+    prefixed, valid, rejected = validate_citations(f"[[id:{bare}]]", sources)
+    assert prefixed == "[neoverený odkaz]" and valid == [] and rejected == [f"id:{bare}"]
+
+
+@pytest.mark.asyncio
+async def test_mock_runtime_still_cites_the_bare_passage_id():
+    messages = [
+        {
+            "role": "user",
+            "content": json.dumps(
+                {"sources": [{"id": "demo-2022/p7-1", "marker": "[[demo-2022/p7-1]]"}]}
+            ),
+        }
+    ]
+    chunks = [item async for item in MockRuntime().stream(messages, RuntimeOptions())]
+    assert "[[demo-2022/p7-1]]" in "".join(item.text for item in chunks)

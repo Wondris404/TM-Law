@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .extract import MAX_UPLOAD
 from .rag import answer
-from .runtime import MockRuntime, ModelRuntime, Ollama, RuntimeUnavailable
+from .runtime import MockRuntime, ModelRuntime, Ollama, RuntimeUnavailable, parse_ollama_threads
 from .schemas import ChatInput, Kind, LegalVersion
 from .store import Store
 
@@ -185,6 +185,20 @@ def create_app(directory: Path | None = None, runtime: ModelRuntime | None = Non
             document = await run_in_threadpool(store.get_document, request.document_id)
             if document is None:
                 raise HTTPException(404, "Dokument neexistuje.")
+
+        try:
+            if request.options.cpu_threads is None:
+                configured = parse_ollama_threads(os.getenv("TM_LAW_OLLAMA_NUM_THREADS"))
+                if configured is not None:
+                    request = request.model_copy(
+                        update={
+                            "options": request.options.model_copy(
+                                update={"cpu_threads": configured}
+                            )
+                        }
+                    )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
         async def stream():
             async with aclosing(answer(store, runtime, request, document)) as events:

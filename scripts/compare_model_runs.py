@@ -16,8 +16,13 @@ def indexed(rows):
 
 
 def compare(baseline: dict, candidate: dict) -> dict:
-    fields = ("dataset_sha256", "corpus_sha256", "settings", "platform", "simulated")
-    if any(baseline[key] != candidate[key] for key in fields):
+    fields = ("dataset_sha256", "corpus_sha256", "platform", "simulated")
+    # Earlier reports omitted cpu_threads when Ollama selected its own default.
+    baseline_settings = {"cpu_threads": None, **baseline["settings"]}
+    candidate_settings = {"cpu_threads": None, **candidate["settings"]}
+    if baseline_settings != candidate_settings or any(
+        baseline[key] != candidate[key] for key in fields
+    ):
         raise ValueError(
             "Benchmark runs must share corpus, tasks, execution settings and platform."
         )

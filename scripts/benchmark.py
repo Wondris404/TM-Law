@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from backend.tm_law.evaluation import benchmark_cases, deterministic_checks
 from backend.tm_law.rag import answer
-from backend.tm_law.runtime import MockRuntime, Ollama
+from backend.tm_law.runtime import MockRuntime, Ollama, parse_ollama_threads
 from backend.tm_law.schemas import ChatInput, LegalVersion, RuntimeOptions
 from backend.tm_law.source_audit import audit_sources
 from backend.tm_law.store import SCHEMA_VERSION, Store
@@ -193,6 +193,11 @@ async def main(argv=None):
     parser.add_argument("--context-window", type=int, action="append", help="Repeat to compare.")
     parser.add_argument("--reasoning", choices=("auto", "on", "off"), action="append")
     parser.add_argument("--device", choices=("auto", "cpu"), default="auto")
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        help="Ollama num_thread. Omit to leave the runtime default unchanged.",
+    )
     parser.add_argument("--temperature", type=float, default=0.15)
     parser.add_argument("--max-tokens", type=int, default=768)
     parser.add_argument("--repeats", type=int, default=1)
@@ -219,6 +224,12 @@ async def main(argv=None):
         parser.error("Source audits require both --cases and --data-dir.")
     if not 1 <= args.repeats <= 20:
         parser.error("--repeats must be between 1 and 20.")
+    try:
+        cpu_threads = parse_ollama_threads(
+            None if args.num_threads is None else str(args.num_threads)
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     simulated = not args.model
     models = dict.fromkeys(args.model or ["tm-law-mock"])
     contexts = dict.fromkeys(args.context_window or [4096])
@@ -240,6 +251,7 @@ async def main(argv=None):
                         measure_memory=args.measure_memory,
                         device=args.device,
                         seed=args.seed,
+                        cpu_threads=cpu_threads,
                     )
                     if options.max_tokens > options.context_window // 2:
                         parser.error("--max-tokens must not exceed half of each --context-window.")

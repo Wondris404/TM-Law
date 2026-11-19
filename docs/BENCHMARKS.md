@@ -20,11 +20,22 @@ uv run --locked python -m scripts.benchmark --model qwen3.5:4b --context-window 
 
 Po stabilnom behu porovnajte ďalšie lokálne nainštalované tagy a kontexty. Jeden proces benchmarku posiela požiadavky postupne a každá žiada Ollamu o uvoľnenie modelu po odpovedi (`keep_alive=0`). Zatvorte paralelné chaty. Spustite Ollamu s `OLLAMA_MAX_LOADED_MODELS=1` a `OLLAMA_NUM_PARALLEL=1`. Najvyšší kontext 8 192 skúšajte až po kontrole rezervy pamäte.
 
+Ak má proces vidieť viac vlákien, než je kvóta CPU, Ollama ich môže všetky použiť a odpoveď vyčerpá časový limit. Predvolený príkaz parameter `num_thread` neposiela. Dve vlákna vynútite takto:
+
+```powershell
+uv run --locked python -m scripts.benchmark --model qwen3.5:4b --context-window 2048 --device cpu --num-threads 2 --summary --output .tm-law/qwen-2-threads.json
+.\scripts\benchmark-windows.ps1 -Model qwen3.5:4b -Threads 2
+```
+
+`--num-threads` je celé číslo od 1 do 256. Report ho zapíše do `settings.cpu_threads`. Vynechanie voľby znamená `null` a doterajšie správanie. Rovnaký limit pre bežnú aplikáciu nastaví premenná `TM_LAW_OLLAMA_NUM_THREADS`. Samotný benchmark túto premennú nečíta. Explicitná hodnota v požiadavke má prednosť pred premennou. Neplatná premenná zastaví otázku ešte pred volaním Ollamy.
+
+Každá pasáž v zadaní pre model obsahuje pole `marker` s presným textom `[[identifikátor]]`. Pokyn žiada skopírovať ho bez prefixu. Identifikátor s pridaným prefixom, napríklad `id:`, validátor naďalej odmietne.
+
 ```powershell
 uv run --locked python -m scripts.benchmark --model qwen3.5:4b --model qwen3.5:9b --model abliterant/qwen3.5-rana:9b --context-window 4096 --reasoning auto --summary --output .tm-law/modely.json
 ```
 
-Pre právne porovnanie pridajte `--cases overene.jsonl --data-dir .tm-law/praca`. Formát úloh vychádza z [ukážkového JSONL](../benchmarks/smoke.jsonl). Vyžadované sú `id`, `category`, `question` a `expected_sources`. Pri hodnotení historického znenia použite kategóriu `historické znenia` a presný `as_of`. Zadajte `expert_verified` iba pri odborne overenej referencii. Fiktívne úlohy sa pri reálnej inferencii vylúčia. Pred porovnaním nástroj urobí jednu snímku právnej databázy bez databázy súkromných dokumentov. Zapíše hash korpusu a vstupných úloh, modelový digest podľa Ollamy a parametre, vrátane `--seed`, `--temperature` a `--max-tokens`. Rovnaký seed nezaručuje identický výstup na rôznom hardvéri.
+Pre právne porovnanie pridajte `--cases overene.jsonl --data-dir .tm-law/praca`. Formát úloh vychádza z [ukážkového JSONL](../benchmarks/smoke.jsonl). Vyžadované sú `id`, `category`, `question` a `expected_sources`. Pri hodnotení historického znenia použite kategóriu `historické znenia` a presný `as_of`. Zadajte `expert_verified` iba pri odborne overenej referencii. Fiktívne úlohy sa pri reálnej inferencii vylúčia. Pred porovnaním nástroj urobí jednu snímku právnej databázy bez databázy súkromných dokumentov. Zapíše hash korpusu a vstupných úloh, modelový digest podľa Ollamy a parametre, vrátane `--seed`, `--temperature`, `--max-tokens` a `--num-threads`. Rovnaký seed nezaručuje identický výstup na rôznom hardvéri.
 
 Výstup obsahuje stav, dĺžkový limit, latenciu, čas k prvému tokenu a k prvému viditeľnému tokenu, počet tokenov a rýchlosť podľa runtime. Pri zapnutom uvažovaní počet generovaných tokenov môže zahŕňať aj interné tokeny. Validita citačných identifikátorov, záchyt zdrojov a zhoda historických ID hodnotia identifikátory. Polia pre odborné posúdenie právnej správnosti a úplnosti sú prázdne, kým ich nevyplní hodnotiteľ. Príznak ukončenia generovania sám neurčuje odbornú úplnosť.
 

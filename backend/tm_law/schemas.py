@@ -10,6 +10,7 @@ PassageText = Annotated[
 ]
 Reasoning = Literal["auto", "on", "off"]
 Kind = Literal["predpis", "rozhodnutie", "eu", "iný"]
+OLLAMA_THREAD_LIMIT = 256
 
 
 class StrictModel(BaseModel):
@@ -88,6 +89,7 @@ class RuntimeOptions(StrictModel):
     measure_memory: bool = False
     device: Literal["auto", "cpu"] = "auto"
     seed: Annotated[int, Field(ge=0, le=2147483647)] | None = None
+    cpu_threads: Annotated[int, Field(ge=1, le=OLLAMA_THREAD_LIMIT)] | None = None
 
 
 class ChatInput(StrictModel):

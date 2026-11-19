@@ -7,6 +7,7 @@ param(
     [ValidateRange(64, 4096)][int]$MaxTokens = 768,
     [ValidateRange(0.0, 1.0)][double]$Temperature = 0.15,
     [ValidateSet('auto', 'cpu')][string]$Device = 'cpu',
+    [int]$Threads = 0,
     [string]$Cases,
     [string]$DataDir,
     [string]$Output
@@ -31,6 +32,10 @@ try {
         '--temperature', $Temperature.ToString([System.Globalization.CultureInfo]::InvariantCulture),
         '--measure-memory', '--summary', '--output', $Output
     )
+    if ($PSBoundParameters.ContainsKey('Threads')) {
+        if ($Threads -lt 1 -or $Threads -gt 256) { throw 'Threads must be an integer from 1 to 256.' }
+        $options += @('--num-threads', $Threads)
+    }
     foreach ($context in $Contexts) { $options += @('--context-window', $context) }
     foreach ($mode in $Reasoning) { $options += @('--reasoning', $mode) }
     if ($Cases) { $options += @('--cases', $Cases) }

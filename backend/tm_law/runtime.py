@@ -7,9 +7,23 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .schemas import RuntimeOptions
+from .schemas import OLLAMA_THREAD_LIMIT, RuntimeOptions
 
 MODEL_ERROR = "Model nie je nainštalovaný v Ollame. Najprv ho stiahnite cez ollama pull."
+THREAD_ERROR = f"Počet CPU vlákien musí byť celé číslo od 1 do {OLLAMA_THREAD_LIMIT}."
+
+
+def parse_ollama_threads(raw: str | None) -> int | None:
+    """Return a validated Ollama thread count. None keeps Ollama's own default."""
+    if raw is None or not raw.strip():
+        return None
+    token = raw.strip()
+    if not re.fullmatch(r"[1-9]\d{0,2}", token):
+        raise ValueError(THREAD_ERROR)
+    value = int(token)
+    if value > OLLAMA_THREAD_LIMIT:
+        raise ValueError(THREAD_ERROR)
+    return value
 
 
 class RuntimeUnavailable(Exception):
@@ -151,6 +165,8 @@ class Ollama:
         }
         if options.device == "cpu":
             payload["options"]["num_gpu"] = 0
+        if options.cpu_threads is not None:
+            payload["options"]["num_thread"] = options.cpu_threads
         if options.seed is not None:
             payload["options"]["seed"] = options.seed
         if think is not None:
