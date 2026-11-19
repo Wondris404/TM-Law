@@ -10,6 +10,17 @@ from .runtime import Chunk, ModelRuntime, Ollama, RuntimeUnavailable
 from .schemas import ChatInput
 from .store import Store
 
+STATUTE_MENTION = re.compile(
+    r"§\s*\d+[a-z]?(?!\w)"
+    r"|\b(?:článok|čl\.)\s*(?:[IVXLCDM]{1,8}|\d+[a-z]?)(?!\w)",
+    re.IGNORECASE,
+)
+INJECTION_HINT = re.compile(
+    r"ignoruj\s+(?:všetky\s+|vsetky\s+)?(?:predch[aá]dzaj[uú]ce|predosl[eé])"
+    r"|ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions"
+    r"|system\s+prompt",
+    re.IGNORECASE,
+)
 REFERENCE = re.compile(
     r"\[\[([^\[\]\n]{1,300})\]\]"
     r"|\[(S[0-9]{1,3}|[A-Za-z0-9_.:-]{1,120}/[A-Za-z0-9_.:-]{1,120})\]"
@@ -51,6 +62,16 @@ def validate_citations(
 
     cleaned = REFERENCE.sub(replace, text)
     return cleaned, list(confirmed.values()), list(rejected)
+
+
+def unmarked_legal_mentions(text: str) -> list[str]:
+    """Statute-like phrases left in the answer after citation markers are resolved."""
+    found = []
+    for match in STATUTE_MENTION.finditer(text):
+        token = " ".join(match.group(0).split())
+        if token not in found:
+            found.append(token)
+    return found
 
 
 def document_excerpt(text: str, query: str, budget: int) -> str:
@@ -209,6 +230,11 @@ async def _answer(
         )
     if not used_sources:
         notes.append("Bez právneho podkladu môže odpoveď slúžiť len na ďalšie skúmanie.")
+    if excerpt and INJECTION_HINT.search(excerpt):
+        notes.append(
+            "Priložený dokument obsahuje text podobný pokynu pre model. "
+            "Berie sa len ako údaj dokumentu, nie ako pokyn."
+        )
     evidence_status = (
         "version_conflict" if conflicts else "available" if used_sources else "insufficient"
     )
@@ -278,6 +304,12 @@ async def _answer(
         for source, item in zip(used_sources, evidence, strict=True)
     ]
     text, citations, rejected = validate_citations("".join(chunks), citation_context, aliases)
+    unsupported = unmarked_legal_mentions(text)
+    if unsupported:
+        notes.append(
+            "Odpoveď uvádza číslo ustanovenia mimo overeného odkazu. "
+            "Také tvrdenie nie je podložené dodaným kontextom."
+        )
     if not citations:
         notes.append("Odpoveď neobsahuje overený odkaz na právny úsek.")
     if final.done_reason == "length":
@@ -288,6 +320,7 @@ async def _answer(
         "answer": text,
         "citations": citations,
         "rejected": rejected,
+        "unsupported_mentions": unsupported,
         "retrieved_ids": [source["citation_id"] for source in sources],
         "context_ids": [source["citation_id"] for source in used_sources],
         "cited_ids": verified_ids + rejected,

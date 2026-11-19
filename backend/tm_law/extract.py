@@ -52,6 +52,8 @@ def extract(data: bytes, suffix: str) -> str:
     else:
         raise ValueError("Obsah súboru nezodpovedá podporovanému typu TXT, PDF alebo DOCX.")
     text = text.strip()
+    if any(ord(char) < 32 and char not in "\n\r\t" for char in text):
+        raise ValueError("Dokument obsahuje nepovolené riadiace znaky.")
     if not text or len(text) > MAX_TEXT:
         raise ValueError("Dokument je prázdny alebo obsahuje priveľa textu.")
     return text

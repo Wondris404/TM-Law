@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 from tm_law.api import create_app
-from tm_law.corpus import coverage, draft_sections, load_package, original_text
+from tm_law.corpus import corpus_warnings, coverage, draft_sections, load_package, original_text
 from tm_law.runtime import MockRuntime
 from tm_law.schemas import LegalVersion
 from tm_law.store import SCHEMA, SCHEMA_VERSION, Store
@@ -88,8 +88,52 @@ def test_archive_package_date_filter_and_coverage(tmp_path):
     summary = coverage(store)
     assert summary["nonfictional_documents"] == 0
     assert summary["version_counts"] == {"archive_verified": 0, "metadata_only": 0, "fictional": 1}
+    assert {row["law_number"] for row in summary["missing_priority_acts"]} == {40, 300, 301, 160}
+    assert summary["overlapping_versions"] == []
     with sqlite3.connect(store.legal) as conn:
         assert conn.execute("SELECT count(*) FROM legal_original").fetchone()[0] == 1
+
+
+def test_priority_gaps_and_overlapping_intervals(tmp_path):
+    store = Store(tmp_path / "data")
+    store.initialize()
+
+    def wording(version_id, number, year, start, end, fictional=False):
+        return LegalVersion.model_validate(
+            {
+                "version_id": version_id,
+                "title": "Skúšobné znenie",
+                "kind": "predpis",
+                "law_number": number,
+                "law_year": year,
+                "authority": "Test",
+                "source_url": None if fictional else "https://example.invalid/act",
+                "acquired_on": "2026-01-01",
+                "effective_from": start,
+                "effective_until": end,
+                "effective_basis": "Skúšobný interval bez právneho textu.",
+                "provenance": "Umelé metadáta, nie text predpisu.",
+                "reuse_terms": "Test.",
+                "fictional": fictional,
+                "passages": [{"source_id": "p1", "section": "1", "text": "Umelý úsek."}],
+            }
+        )
+
+    store.import_version(wording("civil-a", 40, 1964, "2020-01-01", "2022-01-01"))
+    store.import_version(wording("civil-b", 40, 1964, "2021-06-01", "2023-01-01"))
+    store.import_version(wording("family-fake", 36, 2005, "2020-01-01", "2021-01-01", True))
+    report = coverage(store)
+    assert all(item["law_number"] != 40 for item in report["missing_priority_acts"])
+    assert {300, 301, 160} <= {item["law_number"] for item in report["missing_priority_acts"]}
+    assert report["overlapping_versions"] == [
+        {"law_number": 40, "law_year": 1964, "versions": ["civil-a", "civil-b"]}
+    ]
+    assert report["coverage_ends"] == [
+        {"law_number": 40, "law_year": 1964, "coverage_until_exclusive": "2023-01-01"}
+    ]
+    empty = corpus_warnings([])
+    assert len(empty["missing_priority_acts"]) == 4
+    assert empty["overlapping_versions"] == []
 
 
 def test_evidence_check_rejects_fake_passages_and_wrong_source_hash(tmp_path):

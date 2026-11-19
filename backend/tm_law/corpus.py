@@ -168,6 +168,85 @@ def draft_sections(text: str) -> list[dict]:
     return passages
 
 
+# Priority statutes named by the product plan. Titles are labels only; the corpus
+# never invents their wording. A missing row means the act is not imported.
+PRIORITY_ACTS = (
+    (40, 1964, "Občiansky zákonník"),
+    (300, 2005, "Trestný zákon"),
+    (301, 2005, "Trestný poriadok"),
+    (160, 2015, "Civilný sporový poriadok"),
+)
+
+
+def _intervals_overlap(left: dict, right: dict) -> bool:
+    start = max(left["effective_from"], right["effective_from"])
+    ends = [
+        value
+        for value, open_ended in (
+            (left.get("effective_until"), left.get("open_ended")),
+            (right.get("effective_until"), right.get("open_ended")),
+        )
+        if value and not open_ended
+    ]
+    return start < min(ends) if ends else True
+
+
+def corpus_warnings(versions: list[dict]) -> dict:
+    """Report absent priority acts and overlapping non-fictional wordings."""
+    authentic = [
+        row
+        for row in versions
+        if row.get("origin") != "fictional"
+        and row.get("kind") == "predpis"
+        and row.get("law_number")
+        and row.get("law_year")
+    ]
+    present = {(row["law_year"], row["law_number"]) for row in authentic}
+    missing = [
+        {"law_number": number, "law_year": year, "label": label}
+        for number, year, label in PRIORITY_ACTS
+        if (year, number) not in present
+    ]
+    overlaps = []
+    by_act: dict[tuple, list[dict]] = {}
+    for row in authentic:
+        if row.get("effective_from"):
+            by_act.setdefault((row["law_year"], row["law_number"]), []).append(row)
+    for rows in by_act.values():
+        ordered = sorted(rows, key=lambda row: (row["effective_from"], row["version_id"]))
+        for index, left in enumerate(ordered):
+            for right in ordered[index + 1 :]:
+                if _intervals_overlap(left, right):
+                    overlaps.append(
+                        {
+                            "law_number": left["law_number"],
+                            "law_year": left["law_year"],
+                            "versions": [left["version_id"], right["version_id"]],
+                        }
+                    )
+    endings = []
+    for (year, number), rows in sorted(by_act.items()):
+        if any(row.get("open_ended") for row in rows):
+            continue
+        ends = [row["effective_until"] for row in rows if row.get("effective_until")]
+        if not ends:
+            continue
+        last = max(ends)
+        if not any(row["effective_from"] >= last for row in rows):
+            endings.append(
+                {
+                    "law_number": number,
+                    "law_year": year,
+                    "coverage_until_exclusive": last,
+                }
+            )
+    return {
+        "missing_priority_acts": missing,
+        "overlapping_versions": overlaps,
+        "coverage_ends": endings,
+    }
+
+
 def coverage(store: Store) -> dict:
     with closing(store.connect(store.legal)) as conn:
         rows = conn.execute(
@@ -212,10 +291,12 @@ def coverage(store: Store) -> dict:
                     )
                 },
                 "origin": origin,
+                "law_number": md.get("law_number"),
+                "law_year": md.get("law_year"),
                 "passages": row["passages"],
             }
         )
-    return {
+    summary = {
         "nonfictional_documents": sum(not fictional for fictional, _ in documents),
         "fictional_documents": sum(fictional for fictional, _ in documents),
         "version_counts": {
@@ -223,3 +304,5 @@ def coverage(store: Store) -> dict:
         },
         "versions": result,
     }
+    summary.update(corpus_warnings(summary["versions"]))
+    return summary
