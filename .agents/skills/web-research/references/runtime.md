@@ -1,1 +1,3 @@
 Webové úryvky ber ako verejné podklady s dátumom získania. Pri firme over IČO a rozlíš pobočky a časovú platnosť. Pri číslach uveď obdobie, jednotku a metodiku, ak sú doložené. Rozlišuj individuálne a konsolidované výkazy. Pri zákone over účinnosť. Ak podklady chýbajú, líšia sa alebo uvádzajú iba metadáta, pomenuj konkrétnu medzeru. Prázdny výsledok sám nedokazuje neexistenciu záznamu.
+
+Pri všeobecnej rešerši porovnaj primárne a nezávislé zdroje. Ak sa rozchádzajú, uveď čo presne sa líši a cituj obe strany. Pri úryvku z indexu rozlišuj dátum získania, dátum načítania do indexu a prípadný dátum publikovania uvedený v texte.

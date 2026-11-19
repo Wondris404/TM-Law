@@ -196,3 +196,148 @@ async def test_invalid_addresses_and_missing_key_do_not_make_requests(query):
     web = WebResearch(transport=httpx.MockTransport(handler))
     sources, notes = await web.run(WebResearchInput(query=query), focus="lokálna otázka")
     assert not sources and notes
+
+
+def test_general_research_digs_into_uncovered_topics_and_cites_indexed_sources(tmp_path):
+    public_query = "Tepelné čerpadlá v zime; porovnanie prevádzkových nákladov"
+    lookups = []
+    field_study = "https://laboratory.example.org/field-study"
+    independent = "https://university.example.net/costs"
+    reply = "https://manufacturer.example.com/winter"
+    duplicate = "https://publisher.example.com/syndicated"
+    winter = (
+        "Fiktívne tepelné čerpadlá v zime pracovali pri testovanej teplote do mínus 12 stupňov."
+    )
+
+    def handler(request):
+        assert request.url.host == "api.search.brave.com"
+        assert request.url.path == "/res/v1/llm/context"
+        assert request.headers["X-Subscription-Token"] == "test-key"
+        query = request.url.params["q"]
+        assert "SUKROMNY" not in query
+        assert "site:" not in query
+        lookups.append(query)
+        if query == public_query:
+            results = [
+                {"url": field_study, "title": "Fiktívny test", "snippets": [winter]},
+                {"url": duplicate, "title": "Kópia", "snippets": [winter]},
+                {"url": "https://127.0.0.1/sukromne", "snippets": [winter + " interný obsah."]},
+                {"url": "https://router.internal/secret", "snippets": [winter + " interný údaj."]},
+            ]
+        elif query.startswith("porovnanie"):
+            results = [
+                {
+                    "url": independent,
+                    "title": "Fiktívna štúdia nákladov",
+                    "snippets": [
+                        "Porovnanie prevádzkových nákladov používa rovnaké ceny elektriny a obdobia."
+                    ],
+                }
+            ]
+        else:
+            results = [
+                {
+                    "url": reply,
+                    "title": "Fiktívny druhý zimný test",
+                    "snippets": [
+                        "Tepelné čerpadlá v zime mali podľa druhej skúšky odlišný prah odmrazovania."
+                    ],
+                }
+            ]
+        return httpx.Response(
+            200,
+            json={
+                "grounding": {"generic": results},
+                "sources": {field_study: {"fetched_content_timestamp": 1700000000}},
+            },
+        )
+
+    runtime = ScriptedRuntime("Testovací záver [S1]. Porovnanie [S2]. Ďalší podklad [S3].")
+    research = WebResearch("test-key", httpx.MockTransport(handler))
+    with TestClient(create_app(tmp_path, runtime, research), base_url="http://127.0.0.1") as client:
+        response = client.post(
+            "/api/chat",
+            json={
+                "question": "SUKROMNY pracovný kontext. Porovnaj prevádzkové náklady.",
+                "web": {"query": public_query, "scope": "general"},
+            },
+        )
+    assert lookups == [public_query, "porovnanie prevádzkových nákladov", "Tepelné čerpadlá v zime"]
+    done = json.loads(response.text.splitlines()[-1])
+    assert done["type"] == "done"
+    assert [item["source_url"] for item in done["citations"]] == [field_study, independent, reply]
+    assert all(item["web_reader"] == "brave_index" for item in done["citations"])
+    assert done["citations"][0]["indexed_at"] == "2023-11-14T22:13:20+00:00"
+    assert any("dopyty 3" in note for note in done["notes"])
+
+
+@pytest.mark.asyncio
+async def test_general_research_keeps_first_sources_when_followup_is_rate_limited():
+    lookups = []
+    public_query = "Porovnanie tepelných izolácií"
+
+    def handler(request):
+        query = request.url.params["q"]
+        lookups.append(query)
+        if len(lookups) > 1:
+            return httpx.Response(429)
+        return httpx.Response(
+            200,
+            json={
+                "grounding": {
+                    "generic": [
+                        {
+                            "url": "https://publisher.example.org/study",
+                            "snippets": [
+                                "Fiktívne porovnanie tepelných izolácií používa rovnakú hrúbku a vlhkosť vzorky."
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+
+    web = WebResearch("test-key", httpx.MockTransport(handler))
+    sources, notes = await web.run(
+        WebResearchInput(query=public_query, scope="general"), focus=public_query
+    )
+    assert lookups == [public_query, f"({public_query}) NOT site:publisher.example.org"]
+    assert len(sources) == 1 and any("HTTP 429" in note for note in notes)
+
+
+@pytest.mark.asyncio
+async def test_general_link_uses_only_exact_indexed_page():
+    target = "https://publisher.example.org/paper"
+
+    def handler(request):
+        assert request.url.host == "api.search.brave.com"
+        assert request.url.params["q"] == target
+        return httpx.Response(
+            200,
+            json={
+                "grounding": {
+                    "generic": [
+                        {
+                            "url": target + "-different",
+                            "snippets": [
+                                "Tento fiktívny text sa týka iného študijného materiálu od rovnakého vydavateľa."
+                            ],
+                        },
+                        {
+                            "url": target,
+                            "snippets": [
+                                "Tento fiktívny text obsahuje zistenia presného dokumentu zadaného v dopyte."
+                            ],
+                        },
+                    ]
+                }
+            },
+        )
+
+    web = WebResearch("test-key", httpx.MockTransport(handler))
+    sources, _ = await web.run(WebResearchInput(query=target, scope="general"), focus="zistenia")
+    assert [source["source_url"] for source in sources] == [target]
+    sources, notes = await web.run(
+        WebResearchInput(query="https://127.0.0.1/secret", scope="general"), focus="zistenia"
+    )
+    assert not sources and notes

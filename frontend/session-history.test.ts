@@ -61,3 +61,11 @@ test('private capacity overflow keeps the ordinary set and stays out of stored J
     assert.equal(serialized.includes(`private-answer-${index}`), false)
   }
 })
+
+test('general research turns use the session limit and stay out of local history', () => {
+  const ordinaryTurn = ordinary('ordinary')
+  const researchTurn = { ...ordinary('research'), sessionOnly: true }
+  const history = rememberTurn([ordinaryTurn, attached('older-attached')], researchTurn, 1, 1)
+  assert.deepEqual(history, [ordinaryTurn, researchTurn])
+  assert.deepEqual(persistentHistory(history), [ordinaryTurn])
+})

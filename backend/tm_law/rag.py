@@ -327,6 +327,8 @@ async def _answer(
             context_source.update(
                 authority=source["authority"], retrieved_at=source["retrieved_at"]
             )
+            if source.get("web_reader") == "brave_index":
+                context_source.update(web_reader="brave_index", indexed_at=source.get("indexed_at"))
         evidence.append(context_source)
         passage_texts.append(body)
         used_sources.append(source)

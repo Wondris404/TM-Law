@@ -22,6 +22,8 @@ export type Source = {
   source_url: string | null
   text: string
   retrieved_at?: string
+  indexed_at?: string
+  web_reader?: 'brave_index'
 }
 
 export type Settings = {
@@ -35,7 +37,7 @@ export type Settings = {
   web_text_search?: boolean
 }
 
-export type WebScope = 'all' | 'law' | 'business' | 'economy'
+export type WebScope = 'all' | 'law' | 'business' | 'economy' | 'general'
 
 export type LocalDocument = { id: string; name: string }
 

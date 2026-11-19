@@ -8,6 +8,7 @@ import re
 import subprocess
 import unicodedata
 from datetime import UTC, datetime
+from itertools import zip_longest
 
 import httpx
 
@@ -75,6 +76,7 @@ PUBLIC_HOSTS = frozenset(
     }
 )
 BRAVE = httpx.URL("https://api.search.brave.com/res/v1/web/search")
+BRAVE_CONTEXT = httpx.URL("https://api.search.brave.com/res/v1/llm/context")
 RPO = httpx.URL("https://api.statistics.sk/rpo/v1/search")
 ORSR = httpx.URL("https://www.orsr.sk/hladaj_ico.asp")
 RUZ = httpx.URL("https://www.registeruz.sk/cruz-public/api/")
@@ -82,7 +84,24 @@ ICO = re.compile(r"(?:ičo\s*[:=]?\s*|ico\s*[:=]?\s*)?([0-9]{8})", re.I)
 ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError, TimeoutError, subprocess.TimeoutExpired)
 MAX_BYTES = 4 * 1024 * 1024
 MAX_PAGES = 6
+MAX_RESEARCH_QUERIES = 3
 REDIRECT_CODES = {301, 302, 303, 307, 308}
+PUBLIC_LINK_HOST = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})"
+)
+PRIVATE_SUFFIXES = {
+    "arpa",
+    "corp",
+    "example",
+    "home",
+    "internal",
+    "invalid",
+    "lan",
+    "local",
+    "localhost",
+    "onion",
+    "test",
+}
 
 
 class PublicPageText(VisibleSourceText):
@@ -126,7 +145,7 @@ def public_url(value: str | httpx.URL) -> httpx.URL:
 async def read_resource(
     client: httpx.AsyncClient, url: httpx.URL, *, params=None, brave_key: str | None = None
 ) -> tuple[httpx.URL, str, bytes]:
-    if brave_key and url != BRAVE:
+    if brave_key and url not in (BRAVE, BRAVE_CONTEXT):
         raise ValueError("Kľúč patrí iba vyhľadávaču.")
     if not brave_key:
         url = public_url(url)
@@ -207,6 +226,109 @@ def relevant_text(text: str, focus: str) -> str:
     terms = words(focus)
     passages = [text[i : i + 1150] for i in range(0, len(text), 850)]
     return max(passages, key=lambda part: len(words(part) & terms), default="").strip()
+
+
+def indexed_url(value: object) -> httpx.URL:
+    """Validate a citation URL returned by the index. The backend does not fetch it."""
+    if not isinstance(value, str) or len(value) > 2000:
+        raise ValueError("Neplatný odkaz v indexe.")
+    try:
+        url = httpx.URL(value)
+    except httpx.InvalidURL as exc:
+        raise ValueError("Neplatný odkaz v indexe.") from exc
+    host = url.raw_host.decode("ascii")
+    if (
+        url.scheme != "https"
+        or url.userinfo
+        or url.port is not None
+        or not PUBLIC_LINK_HOST.fullmatch(host)
+        or host.rsplit(".", 1)[-1] in PRIVATE_SUFFIXES
+    ):
+        raise ValueError("Index musí odkazovať na verejnú HTTPS stránku.")
+    return url.copy_with(fragment=None)
+
+
+def indexed_sources(payload: dict, focus: str) -> list[dict]:
+    grounding = payload.get("grounding")
+    metadata = payload.get("sources")
+    terms = words(focus)
+    results = []
+    for item in json_records(grounding.get("generic") if isinstance(grounding, dict) else None):
+        try:
+            url = indexed_url(item.get("url"))
+        except ValueError:
+            continue
+        snippets = item.get("snippets")
+        if not isinstance(snippets, list):
+            continue
+        excerpts = [relevant_text(text, focus)[:900] for text in snippets if isinstance(text, str)]
+        excerpt = max(excerpts, key=lambda text: len(words(text) & terms), default="")
+        if len(excerpt) < 45:
+            continue
+        title = item.get("title")
+        record = source(
+            url, title if isinstance(title, str) and title.strip() else url.host, url.host, excerpt
+        )
+        record["web_reader"] = "brave_index"
+        site = metadata.get(item["url"]) if isinstance(metadata, dict) else None
+        timestamp = site.get("fetched_content_timestamp") if isinstance(site, dict) else None
+        if type(timestamp) is int and 0 < timestamp <= datetime.now(UTC).timestamp():
+            record["indexed_at"] = datetime.fromtimestamp(timestamp, UTC).isoformat(
+                timespec="seconds"
+            )
+        results.append(record)
+    return results
+
+
+def distinct_sources(batches: list[list[dict]]) -> list[dict]:
+    first, overflow = [], []
+    urls, extracts, hosts = set(), set(), set()
+    for row in zip_longest(*batches):
+        for item in row:
+            if item is None:
+                continue
+            address = item["source_url"]
+            excerpt = " ".join(item["text"].casefold().split())
+            if address in urls or excerpt in extracts:
+                continue
+            host = item["authority"].removeprefix("www.")
+            (overflow if host in hosts else first).append(item)
+            urls.add(address)
+            extracts.add(excerpt)
+            hosts.add(host)
+    return (first + overflow)[:MAX_PAGES]
+
+
+def next_research_query(public_query: str, attempted: list[str], sources: list[dict]) -> str | None:
+    facets = list(
+        dict.fromkeys(
+            part.strip() for part in re.split(r"[;?\n]+", public_query) if len(words(part)) >= 2
+        )
+    )
+    coverage = {}
+    for facet in facets if len(facets) > 1 else []:
+        if facet in attempted:
+            continue
+        terms = words(facet)
+        matching_hosts = {
+            item["authority"].removeprefix("www.")
+            for item in sources
+            if 2 * len(terms & words(item["title"] + " " + item["text"])) >= len(terms)
+        }
+        if len(matching_hosts) < 2:
+            coverage[facet] = len(matching_hosts)
+    if coverage:
+        return min(coverage, key=coverage.__getitem__)
+    if len(attempted) == 1 and not re.search(r"\bsite:", public_query, re.I):
+        if sources:
+            host = sources[0]["authority"].removeprefix("www.")
+            operator = f"NOT site:{host}"
+            base = " ".join(public_query.split()[:73])[: 597 - len(operator)]
+            return f"({base}) {operator}"
+        words_in_query = public_query.split()
+        if len(words_in_query) > 8:
+            return " ".join(words_in_query[:8])
+    return None
 
 
 def html_content(data: bytes, content_type: str, host: str) -> tuple[str, str]:
@@ -363,8 +485,16 @@ class WebResearch:
                 try:
                     url = public_url(request.query)
                 except ValueError as exc:
-                    return [], [str(exc)]
+                    if request.scope != "general":
+                        return [], [str(exc)]
+                    try:
+                        indexed = indexed_url(request.query)
+                    except ValueError as invalid:
+                        return [], [str(invalid)]
+                    return await self.research_web(client, request.query, focus, target=indexed)
                 tasks = [(url.host, read_page(client, url, focus))]
+            elif request.scope == "general":
+                return await self.research_web(client, request.query, focus)
             else:
                 if not self.brave_key:
                     return [], [
@@ -397,6 +527,66 @@ class WebResearch:
             elif not any(item["source_url"] == result["source_url"] for item in sources):
                 sources.append(result)
         return sources, list(dict.fromkeys(notes))
+
+    async def research_web(
+        self,
+        client: httpx.AsyncClient,
+        public_query: str,
+        focus: str,
+        *,
+        target: httpx.URL | None = None,
+    ) -> tuple[list[dict], list[str]]:
+        if not self.brave_key:
+            return [], [
+                "Rešerš celého webu vyžaduje kľúč Brave Search API s prístupom k LLM Context."
+            ]
+        attempted: list[str] = []
+        batches: list[list[dict]] = []
+        sources: list[dict] = []
+        notes: list[str] = []
+        query = public_query
+        for _ in range(MAX_RESEARCH_QUERIES):
+            attempted.append(query)
+            try:
+                _, data = await read_json(
+                    client,
+                    BRAVE_CONTEXT,
+                    params={
+                        "q": " ".join(query.split()[:75]),
+                        "search_lang": "sk",
+                        "maximum_number_of_urls": 8,
+                        "maximum_number_of_tokens": 3072,
+                        "enable_source_metadata": "true",
+                    },
+                    brave_key=self.brave_key,
+                )
+            except httpx.HTTPStatusError as exc:
+                notes.append(f"Brave LLM Context vrátil HTTP {exc.response.status_code}.")
+                break
+            except ERRORS:
+                notes.append("Časť rešerše sa nepodarilo načítať z Brave LLM Context.")
+                break
+            batch = indexed_sources(data, f"{focus} {query}")
+            if target is not None:
+                sources = distinct_sources(
+                    [[item for item in batch if item["source_url"] == str(target)]]
+                )
+                break
+            batches.append(batch)
+            sources = distinct_sources(batches)
+            follow_up = next_research_query(public_query, attempted, sources)
+            if follow_up is None:
+                break
+            query = follow_up
+        if sources:
+            notes.append(
+                f"Rešerš celého webu · dopyty {len(attempted)} · vybrané zdroje {len(sources)}."
+            )
+        elif target is not None:
+            notes.append("Index neposkytol použiteľný úryvok z tejto presnej adresy.")
+        elif not notes:
+            notes.append("Rešerš celého webu nenašla použiteľné podklady.")
+        return sources, notes
 
     async def search(self, client: httpx.AsyncClient, request: WebResearchInput) -> list[httpx.URL]:
         scopes = SITES[request.scope]

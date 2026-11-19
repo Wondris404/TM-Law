@@ -14,7 +14,7 @@ const navigation = [
 ] as const
 
 type Tab = typeof navigation[number]['id']
-type Turn = { question: string; result: Result; simulated: boolean; privateDocument?: boolean }
+type Turn = { question: string; result: Result; simulated: boolean; privateDocument?: boolean; sessionOnly?: boolean }
 type Preferences = {
   model: string
   context: number
@@ -53,10 +53,11 @@ function humanError(error: unknown) {
 
 function SourceCard({ source, number }: { source: Source; number?: number }) {
   if (source.kind === 'web') return <article className="source">
-    <span className="chip">Verejný web</span>
+    <span className="chip">{source.web_reader === 'brave_index' ? 'Úryvok z indexu Brave' : 'Verejný web'}</span>
     <h3>{number !== undefined && `[${number}] `}{source.title}</h3>
     <p className="excerpt">{source.text}{source.context_truncated ? ' […]' : ''}</p>
     <small>{source.authority}{source.retrieved_at && ` · Získané ${new Date(source.retrieved_at).toLocaleString('sk-SK')}`}</small>
+    {source.indexed_at && <small>Načítané do indexu {new Date(source.indexed_at).toLocaleString('sk-SK')}</small>}
     {source.source_url && <a href={source.source_url} target="_blank" rel="noopener noreferrer">Otvoriť webový zdroj ↗</a>}
   </article>
   const interval = source.effective_from
@@ -198,6 +199,7 @@ function App() {
     event.preventDefault()
     if (controller.current || question.trim().length < 3 || (webEnabled && webQuery.trim().length < 3)) return
     const attached = Boolean(doc)
+    const generalResearch = webEnabled && webScope === 'general'
     const current = new AbortController()
     controller.current = current
     setPending(question)
@@ -230,6 +232,7 @@ function App() {
         if (item.type === 'done') {
           setHistory((previous) => rememberTurn(previous, {
             question, simulated, result: item, ...(attached ? { privateDocument: true } : {}),
+            ...(generalResearch ? { sessionOnly: true } : {}),
           }))
           setQuestion('')
           setWebEnabled(false)
@@ -347,7 +350,7 @@ function App() {
             {history.map((turn, index) => <article className="turn" key={index}>
               <p className="question">{turn.question}</p>
               {turn.simulated && <span className="chip warning">Testovacia odpoveď</span>}
-              {turn.privateDocument && <span className="chip">Len v tejto relácii</span>}
+              {(turn.privateDocument || turn.sessionOnly) && <span className="chip">Len v tejto relácii</span>}
               <p className="answer">{turn.result.answer}</p>
               {turn.result.notes.map((note) => <p className="muted note" key={note}>{note}</p>)}
               {turn.result.retrieved_ids && <p className="muted note">
@@ -383,11 +386,13 @@ function App() {
                   aria-describedby="web-query-help" onChange={(event) => setWebQuery(event.target.value)} /></Field>
                 <Field label="Oblasť vyhľadávania"><select value={webScope} disabled={Boolean(pending)}
                   onChange={(event) => setWebScope(event.target.value as WebScope)}>
-                  <option value="all">Všetky oblasti</option><option value="law">Právo</option>
+                  <option value="all">Všetky odborné oblasti</option><option value="general">Celý web · viac krokov</option>
+                  <option value="law">Právo</option>
                   <option value="business">Firmy a registre</option><option value="economy">Ekonomika</option>
                 </select></Field>
               </div>
-              <p className="muted note" id="web-query-help">Na web sa posiela verejný dopyt. Otázka a dokument ostávajú v TM-Law.
+              <p className="muted note" id="web-query-help">Na web sa posiela verejný dopyt a jeho spresnenia. Otázka a dokument ostávajú v TM-Law.
+                {webScope === 'general' && ' Podtémy môžete oddeliť bodkočiarkou.'}
                 {settings && !settings.web_text_search && ' Bez kľúča Brave Search zadajte IČO alebo odkaz na podporovaný portál.'}</p>
             </div>}
             <div className="form-row">

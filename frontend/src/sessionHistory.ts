@@ -1,7 +1,7 @@
 export const HISTORY_LIMIT = 30
 export const PRIVATE_HISTORY_LIMIT = 30
 
-type SessionTurn = { privateDocument?: boolean }
+type SessionTurn = { privateDocument?: boolean; sessionOnly?: boolean }
 
 export function rememberTurn<T extends SessionTurn>(
   history: readonly T[],
@@ -10,13 +10,13 @@ export function rememberTurn<T extends SessionTurn>(
   privateLimit = PRIVATE_HISTORY_LIMIT,
 ): T[] {
   const next = history.concat(turn)
-  const trimOrdinary = !turn.privateDocument
+  const trimOrdinary = !(turn.privateDocument || turn.sessionOnly)
   let ordinaryKept = 0
   let privateKept = 0
   const selected: T[] = []
   for (let index = next.length - 1; index >= 0; index -= 1) {
     const item = next[index]
-    if (item.privateDocument) {
+    if (item.privateDocument || item.sessionOnly) {
       if (privateKept < privateLimit) {
         selected.push(item)
         privateKept += 1
@@ -31,10 +31,10 @@ export function rememberTurn<T extends SessionTurn>(
 
 export function persistentHistory<T extends SessionTurn>(
   history: readonly T[],
-): Omit<T, 'privateDocument'>[] {
+): Omit<T, 'privateDocument' | 'sessionOnly'>[] {
   return history.flatMap((turn) => {
-    if (turn.privateDocument) return []
-    const { privateDocument: _privateDocument, ...stored } = turn
+    if (turn.privateDocument || turn.sessionOnly) return []
+    const { privateDocument: _privateDocument, sessionOnly: _sessionOnly, ...stored } = turn
     return [stored]
   })
 }

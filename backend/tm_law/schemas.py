@@ -98,7 +98,7 @@ class RuntimeOptions(StrictModel):
 
 class WebResearchInput(StrictModel):
     query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=400)]
-    scope: Literal["all", "law", "business", "economy"] = "all"
+    scope: Literal["all", "law", "business", "economy", "general"] = "all"
 
 
 class ChatInput(StrictModel):
