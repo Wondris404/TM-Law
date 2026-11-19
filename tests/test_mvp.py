@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from tm_law.api import create_app
-from tm_law.rag import unmarked_legal_mentions, validate_citations
+from tm_law.rag import quarantine_markers, unmarked_legal_mentions, validate_citations
 from tm_law.runtime import Chunk, MockRuntime, RuntimeUnavailable
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -243,6 +243,47 @@ def test_unmarked_statute_and_document_instruction(tmp_path):
         )
         notes = json.loads(guarded.text.splitlines()[-1])["notes"]
         assert any("podobný pokynu" in note for note in notes)
+
+
+def test_untrusted_markers_do_not_stay_in_the_model_prompt(tmp_path):
+    cleaned, changed = quarantine_markers("Pozri [[tajny/id]] a [S1].")
+    assert changed and "[[" not in cleaned and "[S1]" not in cleaned
+    with TestClient(
+        create_app(tmp_path, ScriptedRuntime("Bez citácie.")),
+        base_url="http://127.0.0.1",
+    ) as client:
+        version = fixture(2024)
+        version["passages"][0]["text"] = "Bežný text [[demo-2024/p7-1]] koniec."
+        assert client.post("/api/legal/import", json=version).status_code == 201
+        cited = client.post(
+            "/api/chat",
+            json={"question": "Čo je v úseku?", "query": "9999/2099 § 7"},
+        )
+        assert any(
+            "Text zdroja obsahoval značku" in note
+            for note in json.loads(cited.text.splitlines()[-1])["notes"]
+        )
+        uploaded = client.post(
+            "/api/documents",
+            files={"file": ("poznamka.txt", "Pozri [[tajny/id]] a [S1].".encode())},
+        )
+        assert uploaded.status_code == 201
+        guarded = client.post(
+            "/api/chat",
+            json={"question": "Zhrň priloženú poznámku.", "document_id": uploaded.json()["id"]},
+        )
+        assert any(
+            "V dokumente boli značky" in note
+            for note in json.loads(guarded.text.splitlines()[-1])["notes"]
+        )
+
+
+def test_deleted_private_text_is_not_left_in_the_database_file(client, tmp_path):
+    secret = "TAJNY-UNIKAT-9f3c"
+    uploaded = client.post("/api/documents", files={"file": ("spis.txt", secret.encode())})
+    assert uploaded.status_code == 201
+    assert client.delete(f"/api/documents/{uploaded.json()['id']}").status_code == 200
+    assert secret.encode() not in (tmp_path / "documents.sqlite3").read_bytes()
 
 
 def test_invalid_upload_guard_and_rebinding(client):

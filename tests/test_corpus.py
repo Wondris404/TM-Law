@@ -5,6 +5,7 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from tm_law.api import create_app
 from tm_law.corpus import corpus_warnings, coverage, draft_sections, load_package, original_text
 from tm_law.runtime import MockRuntime
@@ -88,7 +89,18 @@ def test_archive_package_date_filter_and_coverage(tmp_path):
     summary = coverage(store)
     assert summary["nonfictional_documents"] == 0
     assert summary["version_counts"] == {"archive_verified": 0, "metadata_only": 0, "fictional": 1}
-    assert {row["law_number"] for row in summary["missing_priority_acts"]} == {40, 300, 301, 160}
+    assert {row["law_number"] for row in summary["missing_priority_acts"]} == {
+        40,
+        300,
+        301,
+        160,
+        161,
+        513,
+        311,
+        162,
+    }
+    assert summary["repeated_passage_texts"] == []
+    assert summary["decision_count"] == 0
     assert summary["overlapping_versions"] == []
     with sqlite3.connect(store.legal) as conn:
         assert conn.execute("SELECT count(*) FROM legal_original").fetchone()[0] == 1
@@ -124,7 +136,9 @@ def test_priority_gaps_and_overlapping_intervals(tmp_path):
     store.import_version(wording("family-fake", 36, 2005, "2020-01-01", "2021-01-01", True))
     report = coverage(store)
     assert all(item["law_number"] != 40 for item in report["missing_priority_acts"])
-    assert {300, 301, 160} <= {item["law_number"] for item in report["missing_priority_acts"]}
+    assert {300, 301, 160, 161, 513, 311, 162} <= {
+        item["law_number"] for item in report["missing_priority_acts"]
+    }
     assert report["overlapping_versions"] == [
         {"law_number": 40, "law_year": 1964, "versions": ["civil-a", "civil-b"]}
     ]
@@ -132,8 +146,57 @@ def test_priority_gaps_and_overlapping_intervals(tmp_path):
         {"law_number": 40, "law_year": 1964, "coverage_until_exclusive": "2023-01-01"}
     ]
     empty = corpus_warnings([])
-    assert len(empty["missing_priority_acts"]) == 4
+    assert len(empty["missing_priority_acts"]) == 8
     assert empty["overlapping_versions"] == []
+
+
+def test_repeated_wording_is_reported_without_being_deleted(tmp_path):
+    store = Store(tmp_path / "data")
+    store.initialize()
+    store.import_version(
+        LegalVersion.model_validate(
+            {
+                "version_id": "repeat",
+                "title": "Skúšobné znenie",
+                "kind": "predpis",
+                "law_number": 9999,
+                "law_year": 2099,
+                "authority": "Test",
+                "acquired_on": "2026-01-01",
+                "effective_from": "2020-01-01",
+                "effective_until": "2021-01-01",
+                "effective_basis": "Skúšobný interval.",
+                "provenance": "Umelé metadáta.",
+                "reuse_terms": "Test.",
+                "fictional": True,
+                "passages": [
+                    {"source_id": "p1", "section": "1", "text": "Rovnaká veta."},
+                    {"source_id": "p2", "section": "2", "text": "Rovnaká veta."},
+                ],
+            }
+        )
+    )
+    report = coverage(store)
+    repeated = report["repeated_passage_texts"]
+    assert len(repeated) == 1 and repeated[0]["copies"] == 2
+    assert set(repeated[0]["source_ids"].split(",")) == {"p1", "p2"}
+    assert len(store.search("9999/2099")) == 2
+
+
+def test_decision_import_requires_case_identity():
+    payload = {
+        "version_id": "decision",
+        "title": "Fiktívne rozhodnutie",
+        "kind": "rozhodnutie",
+        "authority": "Test",
+        "acquired_on": "2026-01-01",
+        "provenance": "Umelé metadáta bez judikátu.",
+        "reuse_terms": "Test.",
+        "fictional": True,
+        "passages": [{"source_id": "p1", "text": "Umelý výrok."}],
+    }
+    with pytest.raises(ValidationError, match="spisovú značku"):
+        LegalVersion.model_validate(payload)
 
 
 def test_evidence_check_rejects_fake_passages_and_wrong_source_hash(tmp_path):

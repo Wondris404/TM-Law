@@ -49,6 +49,24 @@ def test_family_law_benchmark_separates_scenarios_and_source_provenance():
     assert after.expected_sources == before.forbidden_sources
 
 
+def test_priority_gap_cases_do_not_claim_law_or_expert_review():
+    cases = benchmark_cases((ROOT / "benchmarks/slovak-priority-gaps.jsonl").read_bytes())
+    assert len(cases) == 8
+    assert {case.query for case in cases} == {
+        "40/1964",
+        "300/2005",
+        "301/2005",
+        "160/2015",
+        "161/2015",
+        "513/1991",
+        "311/2001",
+        "162/2015",
+    }
+    assert all(case.expected_evidence == "insufficient" for case in cases)
+    assert all(not case.expected_sources and not case.expert_verified for case in cases)
+    assert all(case.scenario_type == "synthetic" for case in cases)
+
+
 def test_blind_sheet_and_assessed_denominators():
     item = BenchmarkCase(
         id="case", category="example", question="Over príklad", expected_sources=[]

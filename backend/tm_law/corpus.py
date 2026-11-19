@@ -175,6 +175,10 @@ PRIORITY_ACTS = (
     (300, 2005, "Trestný zákon"),
     (301, 2005, "Trestný poriadok"),
     (160, 2015, "Civilný sporový poriadok"),
+    (161, 2015, "Civilný mimosporový poriadok"),
+    (513, 1991, "Obchodný zákonník"),
+    (311, 2001, "Zákonník práce"),
+    (162, 2015, "Správny súdny poriadok"),
 )
 
 
@@ -305,4 +309,20 @@ def coverage(store: Store) -> dict:
         "versions": result,
     }
     summary.update(corpus_warnings(summary["versions"]))
+    summary["repeated_passage_texts"] = repeated_passage_texts(store)
+    summary["decision_count"] = sum(row.get("kind") == "rozhodnutie" for row in summary["versions"])
     return summary
+
+
+def repeated_passage_texts(store: Store) -> list[dict]:
+    """Same wording stored under more than one source id inside one version."""
+    with closing(store.connect(store.legal)) as conn:
+        rows = conn.execute(
+            """SELECT version_id, group_concat(source_id) AS source_ids, count(*) AS copies
+               FROM passage GROUP BY version_id, text HAVING count(*) > 1
+               ORDER BY version_id"""
+        ).fetchall()
+    return [
+        {"version_id": row["version_id"], "source_ids": row["source_ids"], "copies": row["copies"]}
+        for row in rows
+    ]

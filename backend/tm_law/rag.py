@@ -107,6 +107,24 @@ def unmarked_legal_mentions(text: str, sources: list[dict] | None = None) -> lis
     return found
 
 
+UNTRUSTED_MARKER = re.compile(r"\[\[|\]\]|\[S[0-9]{1,3}\]")
+
+
+def quarantine_markers(text: str) -> tuple[str, bool]:
+    """Remove citation-marker syntax from untrusted text before it reaches the model."""
+
+    def replace(match: re.Match) -> str:
+        token = match.group(0)
+        if token == "[[":
+            return "⟨⟨"
+        if token == "]]":
+            return "⟩⟩"
+        return f"({token[1:-1]})"
+
+    cleaned, count = UNTRUSTED_MARKER.subn(replace, text)
+    return cleaned, count > 0
+
+
 def document_excerpt(text: str, query: str, budget: int) -> str:
     terms = set(re.findall(r"\w{3,}", query.casefold()))
     segments = [text[i : i + 750] for i in range(0, len(text), 650)]
@@ -217,11 +235,13 @@ async def _answer(
         yield {"type": "error", "message": "Otázka je pre zvolený kontext príliš dlhá."}
         return
     budget -= len(question)
-    excerpt = document_excerpt(document["text"], query, budget // 2) if document else None
+    raw_excerpt = document_excerpt(document["text"], query, budget // 2) if document else None
+    excerpt, excerpt_markers = quarantine_markers(raw_excerpt) if raw_excerpt else (None, False)
     evidence = []
     used_sources = []
     passage_texts = []
     aliases = {}
+    source_markers = False
     budget -= len(excerpt or "")
     eligible_sources = [source for source in sources if source["norm_status"] != "repealed"]
     if len(eligible_sources) != len(sources):
@@ -236,6 +256,8 @@ async def _answer(
         if not body:
             break
         aliases[alias] = source["citation_id"]
+        visible_body, body_markers = quarantine_markers(body)
+        source_markers = source_markers or body_markers
         evidence.append(
             {
                 "id": source["citation_id"],
@@ -246,7 +268,7 @@ async def _answer(
                 "until": source["effective_until"],
                 "fictional": source["fictional"],
                 "norm_status": source["norm_status"],
-                "text": f"{body}\n{label}",
+                "text": f"{visible_body}\n{label}",
             }
         )
         passage_texts.append(body)
@@ -269,6 +291,14 @@ async def _answer(
         )
     if not used_sources:
         notes.append("Bez právneho podkladu môže odpoveď slúžiť len na ďalšie skúmanie.")
+    if source_markers:
+        notes.append(
+            "Text zdroja obsahoval značku citácie. Do zadania pre model išla len ako obyčajný text."
+        )
+    if excerpt_markers:
+        notes.append(
+            "V dokumente boli značky citácií. Do zadania pre model išli len ako obyčajný text."
+        )
     if excerpt and INJECTION_HINT.search(excerpt):
         notes.append(
             "Priložený dokument obsahuje text podobný pokynu pre model. "

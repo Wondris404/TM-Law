@@ -75,6 +75,10 @@ class LegalVersion(StrictModel):
             raise ValueError("Koniec účinnosti musí byť po začiatku.")
         if len({p.source_id for p in self.passages}) != len(self.passages):
             raise ValueError("Identifikátory úsekov musia byť jedinečné v rámci znenia.")
+        if self.kind == "rozhodnutie" and not all(
+            (self.case_number, self.decision_date, self.decision_type, self.publication_status)
+        ):
+            raise ValueError("Rozhodnutie vyžaduje spisovú značku, dátum, typ a stav publikovania.")
         return self
 
 
