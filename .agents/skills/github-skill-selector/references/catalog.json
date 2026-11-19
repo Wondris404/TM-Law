@@ -1,0 +1,764 @@
+{
+  "groups": {
+    "web": "Webová rešerš",
+    "sk": "Slovenské právo, firmy a verejné registre",
+    "eu": "Právo EÚ, ekonomika a konektory",
+    "documents": "PDF, skeny a prílohy",
+    "quality": "Vyhľadávanie v korpuse a meranie kvality"
+  },
+  "resources": [
+    {
+      "repo": "ItzCrazyKns/Vane",
+      "name": "Vane",
+      "group": "web",
+      "kind": "referencia",
+      "use": "Režimy webovej rešerše, Ollama a citácie v používateľskom rozhraní."
+    },
+    {
+      "repo": "assafelovic/gpt-researcher",
+      "name": "GPT Researcher",
+      "group": "web",
+      "kind": "aplikácia",
+      "use": "Plánovanie podtém, paralelné čítanie a syntéza reportu v Pythone.",
+      "upstream": {
+        "name": "gpt-researcher",
+        "revision": "ddd4db36208d9c8e49f3b2436efda97baecb5433",
+        "path": "skills/gpt-researcher/SKILL.md",
+        "intents": [
+          "research-agent",
+          "web-research"
+        ]
+      }
+    },
+    {
+      "repo": "dzhng/deep-research",
+      "name": "Deep Research",
+      "group": "web",
+      "kind": "referencia",
+      "use": "Krátka iteračná slučka s doplňujúcimi dopytmi podľa zistení."
+    },
+    {
+      "repo": "langchain-ai/open_deep_research",
+      "name": "Open Deep Research",
+      "group": "web",
+      "kind": "referencia",
+      "use": "Konfigurovateľné zdroje, MCP a limit iterácií. GitHub eviduje repozitár ako archivovaný."
+    },
+    {
+      "repo": "searxng/searxng",
+      "name": "SearXNG",
+      "group": "web",
+      "kind": "služba",
+      "use": "Vlastná inštancia metavyhľadávača pre ďalší zdroj výsledkov vedľa Brave."
+    },
+    {
+      "repo": "adbar/trafilatura",
+      "name": "Trafilatura",
+      "group": "web",
+      "kind": "knižnica",
+      "use": "Extrakcia hlavného textu, dátumu a tabuliek z HTML v Pythone."
+    },
+    {
+      "repo": "originalmagneto/RUZ-MCP",
+      "name": "RUZ-MCP",
+      "group": "sk",
+      "kind": "konektor",
+      "use": "Z IČO k závierkam, výkazom, šablónam a PDF. Tržby a výsledok hospodárenia overuj v konkrétnom výkaze.",
+      "upstream": {
+        "name": "ruz-uctovne-zavierky",
+        "revision": "c2dd4a07565c7d30bc5ebcc28f35a7cec36421f5",
+        "path": "skills/ruz-uctovne-zavierky/SKILL.md",
+        "intents": [
+          "company-financials"
+        ]
+      }
+    },
+    {
+      "repo": "ESKRiPO/Slov-Lex_MCP",
+      "name": "Slov-Lex MCP",
+      "group": "sk",
+      "kind": "konektor",
+      "use": "Stránkované načítanie predpisu podľa dátumu účinnosti. Vzor pre import časových znení."
+    },
+    {
+      "repo": "legalize-dev/legalize-sk",
+      "name": "Legalize SK",
+      "group": "sk",
+      "kind": "dataset",
+      "use": "Porovnanie slovenských predpisov v Gite. Verzie bez dátumu účinnosti alebo dostupného textu projekt preskakuje."
+    },
+    {
+      "repo": "LawCodex/sk",
+      "name": "LawCodex SK",
+      "group": "sk",
+      "kind": "dataset",
+      "use": "Snímka konsolidovaných textov a mapovanie identifikátorov na zdroj Slov-Lexu."
+    },
+    {
+      "repo": "ShepDogSk/rpo-mcp-server",
+      "name": "RPO MCP",
+      "group": "sk",
+      "kind": "konektor",
+      "use": "Vyhľadanie podľa názvu alebo IČO, detail subjektu a jeho história v RPO."
+    },
+    {
+      "repo": "byrokrat-sk/register-parser",
+      "name": "Register Parser",
+      "group": "sk",
+      "kind": "knižnica",
+      "use": "Štruktúrovaná extrakcia z ORSR, živnostenského registra a ďalších portálov."
+    },
+    {
+      "repo": "otvorenesudy/otvorenesudy",
+      "name": "Otvorené súdy",
+      "group": "sk",
+      "kind": "aplikácia",
+      "use": "Vzor vyhľadávania a dátového modelu slovenských súdnych rozhodnutí."
+    },
+    {
+      "repo": "vargadavid304/slovak-court-decisions-dataset",
+      "name": "Slovak Court Decisions Dataset",
+      "group": "sk",
+      "kind": "dataset",
+      "use": "Anotované odkazy z rozhodnutí na predpisy a judikatúru. Pred použitím datasetu over podmienky jeho použitia."
+    },
+    {
+      "repo": "zltastopa/zmluvy",
+      "name": "Zmluvy",
+      "group": "sk",
+      "kind": "aplikácia",
+      "use": "Vzor vyhľadávania zmlúv v CRZ podľa IČO, protistrany a textu."
+    },
+    {
+      "repo": "cyanheads/eur-lex-mcp-server",
+      "name": "EUR-Lex MCP",
+      "group": "eu",
+      "kind": "konektor",
+      "use": "CELEX, ELI, ECLI a väzby medzi aktom, novelami, konsolidáciami a transpozíciou.",
+      "upstream": {
+        "name": "eur-lex-guide",
+        "revision": "19c2200a6b94585f881d1716d8f5cb7513466a40",
+        "path": "skills/eur-lex-guide/SKILL.md",
+        "intents": [
+          "eu-law"
+        ]
+      }
+    },
+    {
+      "repo": "eurostat/PRost",
+      "name": "Eurostat PRost",
+      "group": "eu",
+      "kind": "referencia",
+      "use": "Príklady Python a R pre získavanie ukazovateľov a časových radov z Eurostatu."
+    },
+    {
+      "repo": "modelcontextprotocol/python-sdk",
+      "name": "MCP Python SDK",
+      "group": "eu",
+      "kind": "knižnica",
+      "use": "Oficiálny Python SDK na vytvorenie MCP klienta alebo čítacieho konektora."
+    },
+    {
+      "repo": "docling-project/docling",
+      "name": "Docling",
+      "group": "documents",
+      "kind": "knižnica",
+      "use": "Lokálna extrakcia štruktúry, tabuliek a poradia čítania z komplexných dokumentov.",
+      "upstream": {
+        "name": "docling",
+        "revision": "825c77458b4d05ed7071d0789dc8e40ba9d18211",
+        "path": "docling/.agents/skills/docling/SKILL.md",
+        "intents": [
+          "document-layout",
+          "pdf-ocr",
+          "office-files"
+        ]
+      }
+    },
+    {
+      "repo": "ocrmypdf/OCRmyPDF",
+      "name": "OCRmyPDF",
+      "group": "documents",
+      "kind": "nástroj",
+      "use": "Pridanie textovej vrstvy do naskenovaného PDF pre existujúci importér."
+    },
+    {
+      "repo": "tesseract-ocr/tessdata_best",
+      "name": "Tesseract Slovak",
+      "group": "documents",
+      "kind": "model",
+      "use": "Slovenské jazykové dáta slk.traineddata pre lokálne OCR."
+    },
+    {
+      "repo": "jsvine/pdfplumber",
+      "name": "pdfplumber",
+      "group": "documents",
+      "kind": "knižnica",
+      "use": "Bunky a polohy riadkov v tabuľke PDF s textovou vrstvou."
+    },
+    {
+      "repo": "microsoft/markitdown",
+      "name": "MarkItDown",
+      "group": "documents",
+      "kind": "knižnica",
+      "use": "Konverzia miestnych kancelárskych príloh, napríklad DOCX a XLSX, do Markdownu."
+    },
+    {
+      "repo": "asg017/sqlite-vec",
+      "name": "sqlite-vec",
+      "group": "quality",
+      "kind": "knižnica",
+      "use": "Vektorové vyhľadávanie vedľa existujúceho FTS5. Rozhranie je pred verziou 1.0."
+    },
+    {
+      "repo": "FlagOpen/FlagEmbedding",
+      "name": "FlagEmbedding",
+      "group": "quality",
+      "kind": "knižnica",
+      "use": "Viacjazyčný BGE-M3 a rerankery na meranie kvality vyhľadávania v právnom korpuse."
+    },
+    {
+      "repo": "qdrant/fastembed",
+      "name": "FastEmbed",
+      "group": "quality",
+      "kind": "knižnica",
+      "use": "Lokálne CPU embeddingy cez ONNX. Vhodné na porovnanie latencie a pamäte."
+    },
+    {
+      "repo": "huggingface/sentence-transformers",
+      "name": "Sentence Transformers",
+      "group": "quality",
+      "kind": "knižnica",
+      "use": "Embeddingy, CrossEncoder na preusporiadanie pasáží a postupy tréningu.",
+      "upstream": {
+        "name": "train-sentence-transformers",
+        "revision": "815cafd2fa997dfdeb50ceae853d6d789e01fe62",
+        "path": "skills/train-sentence-transformers/SKILL.md",
+        "intents": [
+          "embedding-training"
+        ]
+      }
+    },
+    {
+      "repo": "promptfoo/promptfoo",
+      "name": "Promptfoo",
+      "group": "quality",
+      "kind": "nástroj",
+      "use": "Opakovateľné testy promptov, očakávaných citácií a zmien správania v CI.",
+      "upstream": {
+        "name": "promptfoo-evals",
+        "revision": "0d4978bace531463ebf200800f396fab9db4c21a",
+        "path": "plugins/promptfoo/skills/promptfoo-evals/SKILL.md",
+        "intents": [
+          "evaluations"
+        ]
+      }
+    },
+    {
+      "repo": "vibrantlabsai/ragas",
+      "name": "Ragas",
+      "group": "quality",
+      "kind": "knižnica",
+      "use": "Metriky pokrytia podkladov a opory odpovede v nájdenom kontexte."
+    },
+    {
+      "repo": "isaacus-dev/legal-rag-bench",
+      "name": "Legal RAG Bench",
+      "group": "quality",
+      "kind": "benchmark",
+      "use": "Metodika hodnotenia právneho vyhľadávania a odpovede na vlastných overených otázkach."
+    }
+  ],
+  "intents": {
+    "research-agent": {
+      "title": "Implementácia alebo porovnanie rešeršného agenta",
+      "keywords": [
+        "gpt researcher",
+        "research agent",
+        "rešeršn agent",
+        "plánovan dopyt",
+        "viackrokov rešerš",
+        "deep research pipeline",
+        "rešeršn pipeline",
+        "orkestrác rešerš"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "assafelovic/gpt-researcher",
+        "ItzCrazyKns/Vane",
+        "dzhng/deep-research",
+        "langchain-ai/open_deep_research"
+      ]
+    },
+    "web-research": {
+      "title": "Rešerš verejnej témy",
+      "keywords": [
+        "dohľadaj na webe",
+        "vyhľadaj na internet",
+        "prehľadaj internet",
+        "web rešerš",
+        "perplexity",
+        "deep research",
+        "web research",
+        "verejn zdroj",
+        "na internet",
+        "celý web"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "ItzCrazyKns/Vane",
+        "assafelovic/gpt-researcher",
+        "dzhng/deep-research",
+        "langchain-ai/open_deep_research"
+      ]
+    },
+    "search-backend": {
+      "title": "Vyhľadávač a jeho zdroje",
+      "keywords": [
+        "searxng",
+        "metavyhľadávač",
+        "search backend",
+        "vyhľadávač",
+        "vyhľadávac api",
+        "alternatív brave"
+      ],
+      "local_skills": [],
+      "resources": [
+        "searxng/searxng",
+        "ItzCrazyKns/Vane",
+        "assafelovic/gpt-researcher"
+      ]
+    },
+    "web-extraction": {
+      "title": "Čítanie a čistenie webovej stránky",
+      "keywords": [
+        "trafilatura",
+        "extrakci html",
+        "parsovan html",
+        "hlavn text stránk",
+        "čítan web stránk",
+        "html parser",
+        "odstráň navigác",
+        "main content",
+        "web extraction"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "adbar/trafilatura",
+        "ItzCrazyKns/Vane",
+        "searxng/searxng"
+      ]
+    },
+    "company-financials": {
+      "title": "Výsledky slovenskej firmy z účtovných výkazov",
+      "keywords": [
+        "účtovn závier",
+        "účtovn výkaz",
+        "porovn tržb",
+        "tržb",
+        "súvah",
+        "výsledovk",
+        "zadlženos",
+        "vlastn iman",
+        "RÚZ",
+        "registeruz",
+        "financial statements",
+        "balance sheet"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "originalmagneto/RUZ-MCP",
+        "ShepDogSk/rpo-mcp-server",
+        "jsvine/pdfplumber",
+        "docling-project/docling"
+      ]
+    },
+    "company-register": {
+      "title": "Identita firmy a záznamy slovenských registrov",
+      "keywords": [
+        "obchodn register",
+        "živnostensk register",
+        "obchodn men",
+        "konateľ",
+        "ORSR",
+        "RPO",
+        "IČO",
+        "identit firm",
+        "podľa názv firm",
+        "company register"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "ShepDogSk/rpo-mcp-server",
+        "byrokrat-sk/register-parser",
+        "originalmagneto/RUZ-MCP"
+      ]
+    },
+    "slovak-legislation": {
+      "title": "Znenia slovenských predpisov a ich novely",
+      "keywords": [
+        "slov lex",
+        "predpis účinn",
+        "slovensk zákon",
+        "slovensk práv",
+        "účinn znen",
+        "historick znen",
+        "prechod ustanoven",
+        "znen zákon",
+        "novel",
+        "paragraf",
+        "predpis"
+      ],
+      "local_skills": [
+        "slovak-law",
+        "web-research"
+      ],
+      "resources": [
+        "ESKRiPO/Slov-Lex_MCP",
+        "legalize-dev/legalize-sk",
+        "LawCodex/sk"
+      ]
+    },
+    "slovak-case-law": {
+      "title": "Slovenská judikatúra a odkazy v rozhodnutiach",
+      "keywords": [
+        "slovensk judikatúr",
+        "slovensk súdn rozhodnut",
+        "slovensk rozsud",
+        "otvoren súd",
+        "spisov znač",
+        "ECLI SK",
+        "judikatúr",
+        "súdn rozhodnut"
+      ],
+      "local_skills": [
+        "slovak-law",
+        "web-research"
+      ],
+      "resources": [
+        "otvorenesudy/otvorenesudy",
+        "vargadavid304/slovak-court-decisions-dataset"
+      ]
+    },
+    "public-contracts": {
+      "title": "Verejné zmluvy a záznamy CRZ",
+      "keywords": [
+        "centrál register zmlúv",
+        "verejn zmluv",
+        "CRZ",
+        "štátn zmluv",
+        "zmluv s verejn sektor"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "zltastopa/zmluvy",
+        "byrokrat-sk/register-parser"
+      ]
+    },
+    "eu-law": {
+      "title": "Legislatíva a judikatúra EÚ",
+      "keywords": [
+        "eur lex",
+        "práv eu",
+        "súd dvor európsk",
+        "CELEX",
+        "ECLI EU",
+        "cellar",
+        "eurovoc",
+        "GDPR",
+        "transpozíc smernic",
+        "eli uri"
+      ],
+      "local_skills": [
+        "slovak-law",
+        "web-research"
+      ],
+      "resources": [
+        "cyanheads/eur-lex-mcp-server"
+      ]
+    },
+    "economic-data": {
+      "title": "Štatistické časové rady",
+      "keywords": [
+        "eurostat",
+        "HICP",
+        "inflác",
+        "makroekon",
+        "štatistick rad",
+        "hospodár ukazovateľ",
+        "časov rad",
+        "SDMX"
+      ],
+      "local_skills": [
+        "web-research"
+      ],
+      "resources": [
+        "eurostat/PRost"
+      ]
+    },
+    "mcp-connector": {
+      "title": "Vývoj Python MCP klienta alebo konektora",
+      "keywords": [
+        "mcp python sdk",
+        "napoj mcp",
+        "mcp klient",
+        "mcp konektor",
+        "mcp server",
+        "model context protocol"
+      ],
+      "local_skills": [],
+      "resources": [
+        "modelcontextprotocol/python-sdk",
+        "cyanheads/eur-lex-mcp-server",
+        "originalmagneto/RUZ-MCP"
+      ]
+    },
+    "document-layout": {
+      "title": "Tabuľky a štruktúra dokumentu",
+      "keywords": [
+        "docling",
+        "porad čítan",
+        "viacstĺpc",
+        "extrakci tabuľk pdf",
+        "tabuľk v pdf",
+        "tabuľk pdf",
+        "štruktúr pdf",
+        "pdf layout",
+        "parse pdf",
+        "read pdf"
+      ],
+      "local_skills": [],
+      "resources": [
+        "docling-project/docling",
+        "jsvine/pdfplumber",
+        "ocrmypdf/OCRmyPDF"
+      ]
+    },
+    "pdf-table-cells": {
+      "title": "Bunky, súradnice a riadky v PDF",
+      "keywords": [
+        "pdfplumber",
+        "poloh bunk",
+        "súradnic bunk",
+        "súradnic tabuľk",
+        "konkrétn riad výkazu",
+        "bounding box"
+      ],
+      "local_skills": [],
+      "resources": [
+        "jsvine/pdfplumber",
+        "docling-project/docling"
+      ]
+    },
+    "pdf-ocr": {
+      "title": "OCR slovenského skenu",
+      "keywords": [
+        "OCR",
+        "naskenovan",
+        "sken",
+        "textov vrstv",
+        "tesseract",
+        "slk traineddata",
+        "scanned pdf"
+      ],
+      "local_skills": [],
+      "resources": [
+        "ocrmypdf/OCRmyPDF",
+        "tesseract-ocr/tessdata_best",
+        "docling-project/docling"
+      ]
+    },
+    "office-files": {
+      "title": "Konverzia miestnych kancelárskych príloh",
+      "keywords": [
+        "markitdown",
+        "XLSX",
+        "PPTX",
+        "DOCX",
+        "office dokument",
+        "office to markdown"
+      ],
+      "local_skills": [],
+      "resources": [
+        "microsoft/markitdown",
+        "docling-project/docling"
+      ]
+    },
+    "local-retrieval": {
+      "title": "Hybridné a vektorové vyhľadávanie v SQLite",
+      "keywords": [
+        "sqlite vec",
+        "vector search",
+        "vektor vyhľad",
+        "hybrid vyhľad",
+        "FTS5",
+        "sqlite",
+        "semantick vyhľad",
+        "lokáln index"
+      ],
+      "local_skills": [],
+      "resources": [
+        "asg017/sqlite-vec",
+        "FlagOpen/FlagEmbedding",
+        "qdrant/fastembed",
+        "huggingface/sentence-transformers"
+      ]
+    },
+    "cpu-embeddings": {
+      "title": "Lokálne embeddingy na CPU",
+      "keywords": [
+        "cpu embedding",
+        "embedding na cpu",
+        "fastembed",
+        "onnx embedding",
+        "low memory embedding",
+        "nízk pamäť embedding"
+      ],
+      "local_skills": [],
+      "resources": [
+        "qdrant/fastembed",
+        "FlagOpen/FlagEmbedding",
+        "huggingface/sentence-transformers"
+      ]
+    },
+    "multilingual-retrieval": {
+      "title": "Viacjazyčné embeddingy a vyhľadávanie",
+      "keywords": [
+        "bge m3",
+        "multilingual embedding",
+        "viacjazyč embedding",
+        "flagembedding",
+        "slovensk embedding"
+      ],
+      "local_skills": [],
+      "resources": [
+        "FlagOpen/FlagEmbedding",
+        "huggingface/sentence-transformers",
+        "qdrant/fastembed"
+      ]
+    },
+    "embedding-training": {
+      "title": "Tréning embeddingov alebo rerankerov",
+      "keywords": [
+        "train sentence transformer",
+        "fine tun",
+        "train embedding",
+        "tréning embedding",
+        "trénuj embedding",
+        "trénuj rerank",
+        "trénuj crossencoder",
+        "tréning rerank",
+        "trénuj model",
+        "natrénuj embeddingový model",
+        "natrénuj embedding",
+        "natrénuj rerank",
+        "natrénuj crossencoder",
+        "natrénuj model"
+      ],
+      "local_skills": [],
+      "resources": [
+        "huggingface/sentence-transformers",
+        "FlagOpen/FlagEmbedding",
+        "qdrant/fastembed"
+      ]
+    },
+    "evaluations": {
+      "title": "Testy promptov a citácií",
+      "keywords": [
+        "promptfoo",
+        "test citáci",
+        "test odpoved",
+        "test prompt",
+        "eval suite",
+        "benchmark prompt",
+        "porovn prompt",
+        "regresn test model"
+      ],
+      "local_skills": [],
+      "resources": [
+        "promptfoo/promptfoo",
+        "vibrantlabsai/ragas",
+        "isaacus-dev/legal-rag-bench",
+        "vargadavid304/slovak-court-decisions-dataset"
+      ]
+    },
+    "rag-metrics": {
+      "title": "Metriky vyhľadávania a opory v kontexte",
+      "keywords": [
+        "ragas",
+        "faithfulness",
+        "context recall",
+        "presnosť kontext",
+        "metrik rag",
+        "metrik vyhľadávan"
+      ],
+      "local_skills": [],
+      "resources": [
+        "vibrantlabsai/ragas",
+        "promptfoo/promptfoo",
+        "isaacus-dev/legal-rag-bench"
+      ]
+    },
+    "legal-rag-benchmark": {
+      "title": "Metodika benchmarku právneho RAG",
+      "keywords": [
+        "legal rag bench",
+        "právn rag benchmark",
+        "benchmark právn rag",
+        "benchmark slovensk judikatúr",
+        "end to end legal"
+      ],
+      "local_skills": [
+        "slovak-law"
+      ],
+      "resources": [
+        "isaacus-dev/legal-rag-bench",
+        "vargadavid304/slovak-court-decisions-dataset",
+        "promptfoo/promptfoo",
+        "vibrantlabsai/ragas"
+      ]
+    },
+    "reranking": {
+      "title": "Preusporiadanie nájdených pasáží",
+      "keywords": [
+        "rerank",
+        "crossencoder",
+        "cross encoder",
+        "zorad pasáž",
+        "preusporiad pasáž",
+        "sentence transformers"
+      ],
+      "local_skills": [],
+      "resources": [
+        "huggingface/sentence-transformers",
+        "FlagOpen/FlagEmbedding"
+      ]
+    },
+    "ocr-language": {
+      "title": "Slovenský jazykový model OCR",
+      "keywords": [
+        "slk traineddata",
+        "tesseract slovenčin",
+        "jazykov model ocr",
+        "slovensk jazyk ocr"
+      ],
+      "local_skills": [],
+      "resources": [
+        "tesseract-ocr/tessdata_best",
+        "ocrmypdf/OCRmyPDF"
+      ]
+    }
+  }
+}
