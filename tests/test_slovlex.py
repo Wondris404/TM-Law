@@ -1,6 +1,14 @@
+import hashlib
+from datetime import date
+
 import pytest
 
-from scripts.import_slovlex import ConstitutionText, FamilyActText, prepare_version
+from scripts.import_slovlex import (
+    ADMINISTRATIVE_PROCEDURE,
+    ConstitutionText,
+    FamilyActText,
+    prepare_version,
+)
 
 
 def test_extract_only_article_one_preserving_printed_numbering():
@@ -100,3 +108,26 @@ def test_constitution_parser_rejects_unknown_article_node():
 def test_unpinned_constitution_export_is_rejected_before_html_parsing():
     with pytest.raises(ValueError, match="očakávaný SHA-256"):
         prepare_version(b"<div id='predpis.text'>Nie je to export.</div>", "20250101")
+
+
+def test_standalone_print_export_preserves_open_interval_and_points(monkeypatch):
+    raw = b"""
+        <div id="paragraf-82.odsek-1.text">Navigation noise.</div>
+        <div id="predpis">
+          <div id="paragraf-82.odsek-1.oznacenie">(1)</div>
+          <div id="paragraf-82.odsek-1.text">Synthetic transitional text.</div>
+          <div id="paragraf-83.bod-1.text">Synthetic numbered point.</div>
+        </div>
+    """
+    key = "20180901"
+    pinned = ADMINISTRATIVE_PROCEDURE[key]
+    monkeypatch.setitem(
+        ADMINISTRATIVE_PROCEDURE, key, pinned._replace(sha256=hashlib.sha256(raw).hexdigest())
+    )
+    result = prepare_version(raw, key)
+    assert result.open_ended and result.effective_until is None
+    assert result.effective_from == date(2018, 9, 1)
+    paragraph, point = result.passages
+    assert paragraph.text == "Synthetic transitional text." and paragraph.paragraph == "1"
+    assert paragraph.norm_status == "transitional"
+    assert point.source_id == "paragraf-83.bod-1" and point.norm_status is None

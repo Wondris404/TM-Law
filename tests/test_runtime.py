@@ -364,7 +364,7 @@ def test_api_thread_env_and_rag_marker_keep_strict_citations(tmp_path, monkeypat
         payloads.append(json.loads(request.content))
         return httpx.Response(
             200,
-            text='{"message":{"content":"Zdroj [[demo-2022/p7-1]]."},"done":false}\n'
+            text='{"message":{"content":"Zdroj [S1], neznámy [S9]."},"done":false}\n'
             '{"done":true,"eval_count":4,"eval_duration":1000000000}\n',
         )
 
@@ -380,15 +380,14 @@ def test_api_thread_env_and_rag_marker_keep_strict_citations(tmp_path, monkeypat
         assert client.post("/api/legal/import", json=version).status_code == 201
         done = json.loads(client.post("/api/chat", json=question).text.splitlines()[-1])
         assert done["citations"][0]["citation_id"] == "demo-2022/p7-1"
-        assert done["rejected"] == []
+        assert done["rejected"] == ["S9"]
+        assert done["verified_ids"] == ["demo-2022/p7-1"]
+        assert done["answer"] == "Zdroj [1], neznámy [neoverený odkaz]."
         user = json.loads(payloads[-1]["messages"][-1]["content"])
         assert payloads[-1]["messages"][0]["content"] == SYSTEM
         assert "nepridávaj pred identifikátor žiadny prefix" in SYSTEM
         assert any(source["id"] == "demo-2022/p7-1" for source in user["sources"])
-        assert all(
-            source["marker"] == f"[[{source['id']}]]" and not str(source["id"]).startswith("id:")
-            for source in user["sources"]
-        )
+        assert [source["marker"] for source in user["sources"]] == ["[S1]", "[S2]"]
         assert "num_thread" not in payloads[-1]["options"]
 
         monkeypatch.setenv("TM_LAW_OLLAMA_NUM_THREADS", "2")
@@ -415,6 +414,11 @@ def test_api_thread_env_and_rag_marker_keep_strict_citations(tmp_path, monkeypat
     assert rejected == [] and valid[0]["citation_id"] == bare and copied == "[1]"
     prefixed, valid, rejected = validate_citations(f"[[id:{bare}]]", sources)
     assert prefixed == "[neoverený odkaz]" and valid == [] and rejected == [f"id:{bare}"]
+    copied, valid, rejected = validate_citations(
+        f"[S1] [[S1]] [{bare}] [[{bare}]] [S2] [1]", sources, {"S1": bare, "S2": "other/id"}
+    )
+    assert copied == "[1] [1] [1] [1] [neoverený odkaz] [neoverený odkaz]"
+    assert valid == sources and rejected == ["S2", "[1]"]
 
 
 @pytest.mark.asyncio

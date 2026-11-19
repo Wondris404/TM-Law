@@ -77,6 +77,7 @@ async def run_case(store, runtime, task, options, repeat, include_answers=False)
     expected = set(task.expected_sources)
     verified = set(result["verified_ids"])
     retrieved = set(result["retrieved_ids"])
+    context = set(result["context_ids"])
     rejected = result["rejected"]
     citations = len(verified) + len(rejected)
     done_reason = result["metrics"]["done_reason"]
@@ -104,6 +105,7 @@ async def run_case(store, runtime, task, options, repeat, include_answers=False)
         "unverified_identifier_rate": len(rejected) / citations if citations else None,
         "expected_sources_cited": len(expected & verified) / len(expected) if expected else None,
         "retrieval_recall": len(expected & retrieved) / len(expected) if expected else None,
+        "context_recall": len(expected & context) / len(expected) if expected else None,
         "historical_fixture_match": expected == verified and not rejected
         if task.category == "historické znenia"
         else None,
@@ -198,6 +200,11 @@ async def main(argv=None):
         type=int,
         help="Ollama num_thread. Omit to leave the runtime default unchanged.",
     )
+    parser.add_argument(
+        "--mmap",
+        action=argparse.BooleanOptionalAction,
+        help="Override Ollama's memory mapping setting for a profiling run.",
+    )
     parser.add_argument("--temperature", type=float, default=0.15)
     parser.add_argument("--max-tokens", type=int, default=768)
     parser.add_argument("--repeats", type=int, default=1)
@@ -220,6 +227,8 @@ async def main(argv=None):
         parser.error("--audit-only does not take --model.")
     if args.require_source_audit and not args.model:
         parser.error("--require-source-audit requires --model.")
+    if args.mmap is not None and not args.model:
+        parser.error("--mmap and --no-mmap require --model.")
     if (args.audit_only or args.require_source_audit) and not (args.cases and args.data_dir):
         parser.error("Source audits require both --cases and --data-dir.")
     if not 1 <= args.repeats <= 20:
@@ -291,6 +300,7 @@ async def main(argv=None):
                     os.getenv("TM_LAW_OLLAMA_URL", "http://127.0.0.1:11434"),
                     options.model,
                     keep_alive=0,
+                    use_mmap=args.mmap,
                 )
             )
             rows = []
@@ -310,6 +320,7 @@ async def main(argv=None):
                     | {
                         "repeats": args.repeats,
                         "ollama_keep_alive": 0 if not simulated else None,
+                        "ollama_use_mmap": args.mmap,
                     },
                     "dataset_sha256": dataset_hash,
                     **({"source_audit": audit} if audit is not None else {}),

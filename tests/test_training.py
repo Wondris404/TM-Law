@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.train_lora import base_weights, preflight
+from scripts.train_lora import PROJECT_HOLDOUTS, base_weights, check_dataset, preflight
 from training.config import TrainingConfig
 from training.dataset import TeacherProvenance, prepare, prepared_splits, read_examples
 
@@ -69,6 +69,32 @@ def test_training_excludes_other_versions_of_benchmark_law(tmp_path):
         raw + json.dumps(example).encode() + b"\n", [benchmark], tmp_path / "data", 42
     )
     assert summary["excluded_holdout_rows"] == 1
+
+
+def test_project_training_requires_the_cloud_holdout(tmp_path):
+    raw = (ROOT / "data/training-smoke.jsonl").read_bytes()
+    rows = [row.model_copy(update={"origin": "licensed_public"}) for row in read_examples(raw)]
+    sample = "".join(row.model_dump_json() + "\n" for row in rows).encode()
+    holdouts = {name: (ROOT / "benchmarks" / name).read_bytes() for name in PROJECT_HOLDOUTS}
+    cloud = holdouts.pop("slovak-cloud-law.jsonl")
+    incomplete, complete = tmp_path / "incomplete", tmp_path / "complete"
+    prepare(sample, list(holdouts.values()), incomplete, 42)
+    config = TrainingConfig(
+        model_name="test",
+        base_directory=tmp_path,
+        base_model_id="test",
+        base_revision="a" * 40,
+        base_license="MIT",
+        data_directory=incomplete,
+        output_directory=tmp_path / "out",
+        target_modules=["q_proj"],
+        device="cpu",
+    )
+    with pytest.raises(ValueError, match="slovak-cloud-law.jsonl"):
+        check_dataset(config)
+    prepare(sample, [*holdouts.values(), cloud], complete, 42)
+    _, splits = check_dataset(config.model_copy(update={"data_directory": complete}))
+    assert sum(len(rows) for rows in splits.values()) == 10
 
 
 def test_preflight_checks_model_files_without_loading_weights(tmp_path):

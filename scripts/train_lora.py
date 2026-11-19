@@ -14,7 +14,7 @@ from training.config import TrainingConfig
 from training.dataset import holdout_keys, overlaps_holdout, prepared_splits
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_HOLDOUTS = ("slovak-starter.jsonl", "slovak-family-law.jsonl")
+PROJECT_HOLDOUTS = ("slovak-starter.jsonl", "slovak-family-law.jsonl", "slovak-cloud-law.jsonl")
 
 
 def base_weights(base: Path) -> list[Path]:

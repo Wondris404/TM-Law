@@ -17,6 +17,7 @@ def test_starter_dataset_and_historical_citation_trap():
     assert past.as_of.year == 2022
     wrong = {
         "retrieved_ids": ["demo-2022/p7-1"],
+        "context_ids": [],
         "verified_ids": [],
         "cited_ids": ["demo-2024/p7-1"],
         "rejected": ["demo-2024/p7-1"],
@@ -24,6 +25,7 @@ def test_starter_dataset_and_historical_citation_trap():
     }
     checks = deterministic_checks(past, wrong)
     assert checks["retrieval_covers_expected"]
+    assert not checks["context_covers_expected"]
     assert not checks["expected_ids_verified"]
     assert not checks["forbidden_ids_absent"]
     assert not checks["historical_ids_match"]

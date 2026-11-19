@@ -89,12 +89,16 @@ def separated_references(query: str) -> list[str] | None:
     if len(parts) < 2:
         return None
     parsed = []
+    previous_prefix = None
     for part in parts:
+        if previous_prefix and PARAGRAPH_PATTERN.fullmatch(part):
+            part = f"{previous_prefix} {part}"
         laws = list(LAW_PATTERN.finditer(part))
         sections = list(SECTION_PATTERN.finditer(part))
         if len(laws) > 1 or len(sections) > 1 or not (laws or sections):
             return None
         parsed.append((part, laws, sections))
+        previous_prefix = " ".join(match[0] for match in (*laws, *sections)) if sections else None
     law_keys = {law.groups() for _, laws, _ in parsed for law in laws}
     if any(not laws and sections for _, laws, sections in parsed) and len(law_keys) != 1:
         return None

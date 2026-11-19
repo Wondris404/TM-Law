@@ -1,8 +1,4 @@
-"""Import pinned Slov-Lex print snapshots offline.
-
-Snapshots 20250801 and 20260601 remain Act 36/2005. Snapshot 20250101 is the
-closed wording of constitutional act 460/1992. Its PDF is pinned, not archived.
-"""
+"""Import pinned Slov-Lex print snapshots offline."""
 
 import argparse
 import hashlib
@@ -33,10 +29,16 @@ VERSIONS = {
         "2026-11-18T20:49:57+00:00",
         "dc612336395aa41ee130d152ecebd5a51b9ef819f1ed29acb67e9582d9e8c793",
     ),
+    "20260901": (
+        "2026-09-01",
+        "2027-01-01",
+        "2026-11-19T14:31:59+00:00",
+        "a718ee856c3adc68b740ef1f3c0cc6aa34bf7fb45ef594dd6c00973b8bca4d15",
+    ),
 }
 
 
-class ConstitutionSnapshot(NamedTuple):
+class SlovLexSnapshot(NamedTuple):
     version_id: str
     title: str
     law_number: int
@@ -46,14 +48,14 @@ class ConstitutionSnapshot(NamedTuple):
     acquired_at: str
     published_on: str
     effective_from: str
-    effective_until: str
+    effective_until: str | None
     sha256: str
     pdf_url: str
     pdf_sha256: str
 
 
 CONSTITUTION = {
-    "20250101": ConstitutionSnapshot(
+    "20250101": SlovLexSnapshot(
         version_id="sk-zz-1992-460-20250101",
         title="Ústava Slovenskej republiky",
         law_number=460,
@@ -68,6 +70,38 @@ CONSTITUTION = {
         pdf_url="https://static.slov-lex.sk/pdf/SK/ZZ/1992/460/ZZ_1992_460_20250101.pdf",
         pdf_sha256="010bca4e5da12a25029384b62c29b422de17e7da87fb1dc33b2ce7dfef36dad0",
     ),
+    "20251101": SlovLexSnapshot(
+        version_id="sk-zz-1992-460-20251101",
+        title="Ústava Slovenskej republiky",
+        law_number=460,
+        law_year=1992,
+        authority="Slovenská národná rada",
+        source_url="https://static.slov-lex.sk/static/SK/ZZ/1992/460/20251101.print.html",
+        acquired_at="2026-11-19T14:31:58+00:00",
+        published_on="1992-10-01",
+        effective_from="2025-11-01",
+        effective_until=None,
+        sha256="e9503a8a37ff337e0d5b9254054824a36b14888789ff7da47884b348cc4201af",
+        pdf_url="https://static.slov-lex.sk/pdf/SK/ZZ/1992/460/ZZ_1992_460_20251101.pdf",
+        pdf_sha256="e331cb20151dd8d9491726fba8ce34554921da87fecfb2e392f6e976a5a8a109",
+    ),
+}
+ADMINISTRATIVE_PROCEDURE = {
+    "20180901": SlovLexSnapshot(
+        version_id="sk-zz-1967-71-20180901",
+        title="Zákon o správnom konaní (správny poriadok)",
+        law_number=71,
+        law_year=1967,
+        authority="Národné zhromaždenie Československej socialistickej republiky",
+        source_url="https://static.slov-lex.sk/static/SK/ZZ/1967/71/20180901.print.html",
+        acquired_at="2026-11-19T14:32:58+00:00",
+        published_on="1967-07-13",
+        effective_from="2018-09-01",
+        effective_until=None,
+        sha256="080f973b6d939a03a79dfdaa36629776737d4083c337217241f7aa19bfbd17d9",
+        pdf_url="https://static.slov-lex.sk/pdf/SK/ZZ/1967/71/ZZ_1967_71_20180901.pdf",
+        pdf_sha256="39192cf3b53dbf90d859a1d08412054e8667de5e50366ee87eb933e2fbaec674",
+    ),
 }
 
 ARTICLE = "predpis.clanok-1"
@@ -81,13 +115,16 @@ PASSAGE = re.compile(
 TRANSITIONAL = {"114", "115", "116", "117", "118", "119", "119a", "119b"}
 
 
-class FamilyActText(HTMLParser):
-    """Read the numbered provisions from article I, excluding the navigation index."""
+class ActText(HTMLParser):
+    """Read numbered provisions inside the specified body of a print export."""
 
-    def __init__(self):
+    def __init__(self, container: str, transitional: set[str], basic_prefix: str | None = None):
         super().__init__()
+        self.container = container
+        self.transitional = transitional
+        self.basic_prefix = basic_prefix
         self.depth = 0
-        self.article_depth = None
+        self.container_depth = None
         self.active = None
         self.parts = []
         self.nodes = {}
@@ -95,10 +132,12 @@ class FamilyActText(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag == "div":
             self.depth += 1
-            node = (dict(attrs).get("id") or "").removeprefix(BASIC)
-            if node == ARTICLE:
-                self.article_depth = self.depth
-            if self.article_depth is not None and PASSAGE.fullmatch(node):
+            node = dict(attrs).get("id") or ""
+            if self.basic_prefix:
+                node = node.removeprefix(self.basic_prefix)
+            if node == self.container:
+                self.container_depth = self.depth
+            if self.container_depth is not None and PASSAGE.fullmatch(node):
                 if self.active is not None or node in self.nodes:
                     raise ValueError(f"Nejednoznačný identifikátor v Slov-Lexe: {node}")
                 self.active = (node, self.depth)
@@ -113,8 +152,8 @@ class FamilyActText(HTMLParser):
             if self.active and self.active[1] == self.depth:
                 self.nodes[self.active[0]] = normalized("".join(self.parts))
                 self.active = None
-            if self.article_depth == self.depth:
-                self.article_depth = None
+            if self.container_depth == self.depth:
+                self.container_depth = None
             self.depth -= 1
 
     def handle_data(self, data):
@@ -122,8 +161,8 @@ class FamilyActText(HTMLParser):
             self.parts.append(data)
 
     def passages(self) -> list[dict]:
-        if self.article_depth is not None or self.active is not None or not self.nodes:
-            raise ValueError("Chýba úplná štruktúra čl. I v exporte Slov-Lexu.")
+        if self.container_depth is not None or self.active is not None or not self.nodes:
+            raise ValueError(f"Chýba úplná štruktúra {self.container} v exporte Slov-Lexu.")
         passages = []
         for node, text in self.nodes.items():
             if not node.endswith(".text") or not text:
@@ -143,13 +182,18 @@ class FamilyActText(HTMLParser):
                     "section": section,
                     "paragraph": paragraph,
                     "letter": match["letter"],
-                    "norm_status": "transitional" if section in TRANSITIONAL else None,
+                    "norm_status": "transitional" if section in self.transitional else None,
                     "text": text,
                 }
             )
         if not passages:
-            raise ValueError("V exporte Slov-Lexu sa nenašli ustanovenia čl. I.")
+            raise ValueError(f"V exporte Slov-Lexu sa nenašli ustanovenia {self.container}.")
         return passages
+
+
+class FamilyActText(ActText):
+    def __init__(self):
+        super().__init__(ARTICLE, TRANSITIONAL, BASIC)
 
 
 NODE = re.compile(
@@ -286,18 +330,27 @@ class ConstitutionText(HTMLParser):
         return passages
 
 
-def prepare_constitution(raw: bytes, snapshot: str) -> LegalVersion:
-    pinned = CONSTITUTION[snapshot]
+def prepare_snapshot(
+    raw: bytes, pinned: SlovLexSnapshot, parser: ActText | ConstitutionText, content: str
+) -> LegalVersion:
     checksum = hashlib.sha256(raw).hexdigest()
     if checksum != pinned.sha256:
-        raise ValueError(f"Export {snapshot} nemá očakávaný SHA-256 zo zdrojového katalógu.")
-    parser = ConstitutionText()
+        raise ValueError(
+            f"Export {pinned.version_id} nemá očakávaný SHA-256 zo zdrojového katalógu."
+        )
     parser.feed(raw.decode("utf-8-sig"))
     parser.close()
     acquired = datetime.fromisoformat(pinned.acquired_at)
     start = datetime.fromisoformat(pinned.effective_from).date()
-    end = datetime.fromisoformat(pinned.effective_until).date()
-    inclusive_end = end - timedelta(days=1)
+    effective_basis = f"Hlavička HTML a PDF: účinná od {start.strftime('%d.%m.%Y')}"
+    if pinned.effective_until:
+        end = datetime.fromisoformat(pinned.effective_until).date()
+        inclusive_end = end - timedelta(days=1)
+        effective_basis += (
+            f" do {inclusive_end.strftime('%d.%m.%Y')}. Koniec v SQLite je prvý deň mimo účinnosti."
+        )
+    else:
+        effective_basis += ", bez uvedeného konca účinnosti v získanom znení."
     version = LegalVersion(
         version_id=pinned.version_id,
         title=pinned.title,
@@ -310,14 +363,11 @@ def prepare_constitution(raw: bytes, snapshot: str) -> LegalVersion:
         acquired_at=acquired,
         published_on=pinned.published_on,
         effective_from=start,
-        effective_until=end,
-        effective_basis=(
-            f"Hlavička HTML a PDF: účinná od {start.strftime('%d.%m.%Y')} "
-            f"do {inclusive_end.strftime('%d.%m.%Y')}. "
-            "Koniec v SQLite je prvý deň mimo účinnosti."
-        ),
+        effective_until=pinned.effective_until,
+        open_ended=pinned.effective_until is None,
+        effective_basis=effective_basis,
         provenance=(
-            "Oficiálny export Slov-Lex. Indexuje preambulu a články z HTML. "
+            f"Oficiálny export Slov-Lex. Indexuje {content} z HTML. "
             "HTML je informatívne, záväzné znenie je PDF."
         ),
         reuse_terms="Text predpisu podľa § 5 písm. b) zákona č. 185/2015 Z. z.",
@@ -330,7 +380,16 @@ def prepare_constitution(raw: bytes, snapshot: str) -> LegalVersion:
 
 def prepare_version(raw: bytes, snapshot: str) -> LegalVersion:
     if snapshot in CONSTITUTION:
-        return prepare_constitution(raw, snapshot)
+        return prepare_snapshot(
+            raw, CONSTITUTION[snapshot], ConstitutionText(), "preambulu a články"
+        )
+    if snapshot in ADMINISTRATIVE_PROCEDURE:
+        return prepare_snapshot(
+            raw,
+            ADMINISTRATIVE_PROCEDURE[snapshot],
+            ActText("predpis", {"82", "84"}),
+            "paragrafy a body",
+        )
     start, end, recorded_at, checksum = VERSIONS[snapshot]
     if hashlib.sha256(raw).hexdigest() != checksum:
         raise ValueError(f"Export {snapshot} nemá očakávaný SHA-256 zo zdrojového katalógu.")
@@ -363,7 +422,7 @@ def prepare_version(raw: bytes, snapshot: str) -> LegalVersion:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("snapshot", choices=[*VERSIONS, *CONSTITUTION])
+    parser.add_argument("snapshot", choices=[*VERSIONS, *CONSTITUTION, *ADMINISTRATIVE_PROCEDURE])
     parser.add_argument("original", type=Path, help="Vopred uložený oficiálny HTML export.")
     parser.add_argument("--data-dir", type=Path, default=Path(".tm-law/slovlex"))
     args = parser.parse_args()

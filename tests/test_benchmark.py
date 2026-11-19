@@ -30,7 +30,9 @@ def test_benchmark_emits_utf8_json_under_cp1252():
     assert report["completed"] == report["total"] == 3
 
     legacy_settings = {
-        key: value for key, value in report["settings"].items() if key != "cpu_threads"
+        key: value
+        for key, value in report["settings"].items()
+        if key not in {"cpu_threads", "ollama_use_mmap"}
     }
     assert (
         compare(report | {"settings": legacy_settings}, report)["matched_completed_responses"] == 3
@@ -125,6 +127,7 @@ def test_real_benchmark_comparison_uses_one_corpus_and_validated_options(tmp_pat
     )
     assert all(payload["options"]["num_ctx"] == 2048 for payload in requests)
     assert all("num_thread" not in payload["options"] for payload in requests)
+    assert all("use_mmap" not in payload["options"] for payload in requests)
     assert all(run["settings"]["cpu_threads"] is None for run in report)
     assert len({payload["messages"][-1]["content"] for payload in requests}) == 1
     assert all(run["completed"] == 2 and not run["simulated"] for run in report)
@@ -206,6 +209,7 @@ def test_benchmark_two_threads_reach_payload_and_report(tmp_path):
                     "cpu",
                     "--num-threads",
                     "2",
+                    "--mmap",
                     "--output",
                     str(output),
                 ],
@@ -227,5 +231,7 @@ def test_benchmark_two_threads_reach_payload_and_report(tmp_path):
     assert result.returncode == 0 and len(requests) == 1
     assert requests[0]["options"]["num_thread"] == 2
     assert requests[0]["options"]["num_gpu"] == 0
+    assert requests[0]["options"]["use_mmap"] is True
     assert report[0]["settings"]["cpu_threads"] == 2
+    assert report[0]["settings"]["ollama_use_mmap"] is True
     assert report[0]["simulated"] is False

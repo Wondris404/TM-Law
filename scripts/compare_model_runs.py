@@ -5,7 +5,15 @@ import json
 from pathlib import Path
 from statistics import median
 
-METRICS = ("seconds", "first_token_seconds", "tokens_per_second", "ollama_load_seconds")
+METRICS = (
+    "seconds",
+    "first_token_seconds",
+    "tokens_per_second",
+    "ollama_load_seconds",
+    "retrieval_recall",
+    "context_recall",
+    "expected_sources_cited",
+)
 
 
 def indexed(rows):
@@ -17,9 +25,9 @@ def indexed(rows):
 
 def compare(baseline: dict, candidate: dict) -> dict:
     fields = ("dataset_sha256", "corpus_sha256", "platform", "simulated")
-    # Earlier reports omitted cpu_threads when Ollama selected its own default.
-    baseline_settings = {"cpu_threads": None, **baseline["settings"]}
-    candidate_settings = {"cpu_threads": None, **candidate["settings"]}
+    default_settings = {"cpu_threads": None, "ollama_use_mmap": None}
+    baseline_settings = default_settings | baseline["settings"]
+    candidate_settings = default_settings | candidate["settings"]
     if baseline_settings != candidate_settings or any(
         baseline[key] != candidate[key] for key in fields
     ):

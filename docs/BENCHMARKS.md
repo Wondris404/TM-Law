@@ -29,7 +29,9 @@ uv run --locked python -m scripts.benchmark --model qwen3.5:4b --context-window 
 
 `--num-threads` je celé číslo od 1 do 256. Report ho zapíše do `settings.cpu_threads`. Vynechanie voľby znamená `null` a doterajšie správanie. Rovnaký limit pre bežnú aplikáciu nastaví premenná `TM_LAW_OLLAMA_NUM_THREADS`. Samotný benchmark túto premennú nečíta. Explicitná hodnota v požiadavke má prednosť pred premennou. Neplatná premenná zastaví otázku ešte pred volaním Ollamy.
 
-Každá pasáž v zadaní pre model obsahuje pole `marker` s presným textom `[[identifikátor]]`. Pokyn žiada skopírovať ho bez prefixu. Identifikátor s pridaným prefixom, napríklad `id:`, validátor naďalej odmietne.
+Každá pasáž v zadaní pre model obsahuje krátku citačnú značku `[S1]`, `[S2]` a podobne. Platí iba v rámci danej odpovede. Server ju preloží na stabilný identifikátor skutočne vloženej pasáže. Prijíma aj úplné identifikátory v jednoduchých a dvojitých hranatých zátvorkách, keď patria do kontextu danej odpovede. Pri porovnaní behov používajte stabilné identifikátory z reportu.
+
+`--mmap` alebo `--no-mmap` explicitne nastaví Ollame mapovanie súboru váh. Bez voľby rozhoduje runtime. Benchmark zapíše hodnotu do `settings.ollama_use_mmap`. Merajte vplyv pri rovnakom modeli, korpuse a otázke. Pamäť mapovaná zo súboru môže byť súčasťou PSS aj súborovej cache. [Cloudové meranie](CLOUD_BENCHMARK_2026-11-19.md)
 
 ```powershell
 uv run --locked python -m scripts.benchmark --model qwen3.5:4b --model qwen3.5:9b --model abliterant/qwen3.5-rana:9b --context-window 4096 --reasoning auto --summary --output .tm-law/modely.json
@@ -68,7 +70,7 @@ uv run --locked python -m scripts.benchmark --cases benchmarks/slovak-starter.js
 
 Voliteľné polia sú `difficulty`, `scenario_type`, `provenance`, `source_groups`, `required_characteristics`, `forbidden_sources` a `expected_evidence`. `fictional` označuje fiktívne právne materiály, ktoré sa nepoužijú pri reálnej inferencii. Syntetický skutkový scenár môže mať aj pravé právne zdroje. Pri autentických referenciách doplňte konkrétny dátum, identifikátory, pôvod a vyžadovanú odpoveď. Skutočné odborné overenie označte až po zhodnotení referencie odborníkom.
 
-`deterministic_checks` kontroluje záchyt očakávaných úsekov, povolené a zakázané ID, historické znenie a stav podkladov. Na spracovanie odborných hodnotení použite report so schválenými dátami a s voľbou `--include-answers`:
+`deterministic_checks` kontroluje záchyt očakávaných úsekov pri vyhľadávaní, ich prítomnosť v kontexte, povolené a zakázané ID, historické znenie a stav podkladov. `retrieval_recall`, `context_recall` a `expected_sources_cited` merajú podiel očakávaných referencií v každej fáze. Na spracovanie odborných hodnotení použite report so schválenými dátami a s voľbou `--include-answers`.
 
 ```powershell
 uv run --locked python -m scripts.legal_review prepare --cases overene.jsonl --report .tm-law/modely.json --sheet .tm-law/posudky.json --key .tm-law/kluc.json
@@ -100,4 +102,8 @@ Po [offline importe](LEGAL_CORPUS_STATUS.md) overte odkazy bez spustenia modelu:
 uv run --locked --offline python -m scripts.benchmark --audit-only --cases benchmarks/slovak-family-law.jsonl --data-dir .tm-law/slovlex --output .tm-law/family-law-source-audit.json
 ```
 
-Pri príprave tréningových dát pridajte aj `--holdout benchmarks/slovak-family-law.jsonl`. Na súvisiacich tréningových príkladoch používajte rovnakú skupinu `sk-zz-2005-36`, aby sa príbuzné znenia nedostali do tréningu s touto vyhradenou sadou. Inferenciu a odborné hodnotenie vykonajte samostatne.
+Pri príprave tréningových dát pridajte aj `--holdout benchmarks/slovak-family-law.jsonl`. Na súvisiacich tréningových príkladoch používajte rovnakú skupinu `sk-zz-2005-36`, aby sa príbuzné znenia nedostali do tréningu s touto vyhradenou sadou. [Príprava tréningu](TRAINING.md)
+
+## Cloudové porovnanie
+
+Sada `slovak-cloud-law.jsonl` má päť testovacích otázok nad autentickou zbierkou. Obsahuje dvojitý odkaz na odseky jedného paragrafu, výber ústavného znenia na hranici účinnosti a kontrolu dňa mimo pokrytia. Tri prípady majú štyri očakávané referencie. Pri zvyšných dvoch sa očakáva chýbajúci podklad. [Otázky](../benchmarks/slovak-cloud-law.jsonl) · [Technický report](CLOUD_BENCHMARK_2026-11-19.md)

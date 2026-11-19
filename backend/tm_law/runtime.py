@@ -73,11 +73,20 @@ def loopback_url(value: str) -> str:
 class Ollama:
     simulated = False
 
-    def __init__(self, url: str, model: str, transport=None, *, keep_alive: int | None = None):
+    def __init__(
+        self,
+        url: str,
+        model: str,
+        transport=None,
+        *,
+        keep_alive: int | None = None,
+        use_mmap: bool | None = None,
+    ):
         self.url = loopback_url(url)
         self.default_model = model
         self.transport = transport
         self.keep_alive = keep_alive
+        self.use_mmap = use_mmap
 
     def client(self):
         return httpx.AsyncClient(
@@ -167,6 +176,8 @@ class Ollama:
             payload["options"]["num_gpu"] = 0
         if options.cpu_threads is not None:
             payload["options"]["num_thread"] = options.cpu_threads
+        if self.use_mmap is not None:
+            payload["options"]["use_mmap"] = self.use_mmap
         if options.seed is not None:
             payload["options"]["seed"] = options.seed
         if think is not None:

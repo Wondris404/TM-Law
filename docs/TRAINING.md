@@ -7,7 +7,7 @@ Projekt trénuje adaptér nad používateľom dodaným lokálnym základom. `TM-
 Každý JSONL záznam potrebuje `id`, spoločnú `group` pre súvisiace prípady, `task`, `prompt`, `answer`, `provenance`, `license`, `origin`, `contains_personal_data: false` a `reusable_for_training: true`. K právnym materiálom pridajte `source_groups` pre rodiny znení a `source_ids` pre presnejšie odkazy. Rovnaké označenia rodín zachovajte v tréningových dátach aj v benchmarke. Pre lokálne identifikátory Slov-Lexu odvádza príprava rodinu predpisu aj z ID jeho časového znenia. Deklarácie o právach a anonymizácii musí skontrolovať človek.
 
 ```powershell
-uv run --locked python -m scripts.prepare_training --input data/training-smoke.jsonl --holdout benchmarks/slovak-starter.jsonl --holdout benchmarks/slovak-family-law.jsonl --output .tm-law/train-smoke
+uv run --locked python -m scripts.prepare_training --input data/training-smoke.jsonl --holdout benchmarks/slovak-starter.jsonl --holdout benchmarks/slovak-family-law.jsonl --holdout benchmarks/slovak-cloud-law.jsonl --output .tm-law/train-smoke
 ```
 
 Príprava vylúči zhodné normalizované otázky aj spoločné rodiny zdrojov s holdoutom. Odstráni identické duplicity, odmietne konfliktné dvojice a rozdelí nezávislé skupiny deterministicky na train, validation a test. Manifest obsahuje hashe vstupu, holdoutu aj každej časti. Preparafrázované otázky môžu prejsť kontrolou. Dopĺňajte preto spoločné skupiny aj manuálnu kontrolu.
@@ -51,10 +51,10 @@ Prvý návrh kompresie je porovnať menší študentský model a viac kvantizác
 
 Pre offline destiláciu pripravte kandidátske dvojice otázka–odpoveď z osobitnej licencovanej sady. Výstupy učiteľa musia prejsť obsahovou kontrolou. Vynechajte benchmarkové otázky, modelové výstupy z benchmarkov a všetky klientské dokumenty. Rovnaký formát `TrainingExample` eviduje povolenie na tréning a pôvod na úrovni riadka.
 
-Vedľa JSONL pripravte manifest s poliami `model`, `revision`, `model_sha256`, `responses_sha256`, `reuse_terms` a `approved_for_training: true`. `model_sha256` je externý zaznamenaný identifikátor konkrétnych váh učiteľa. Import kontroluje `responses_sha256` proti presným bajtom JSONL a uloží pôvod do pripravenej sady. Obe štandardné benchmarkové sady musia zostať vyhradené.
+Vedľa JSONL pripravte manifest s poliami `model`, `revision`, `model_sha256`, `responses_sha256`, `reuse_terms` a `approved_for_training: true`. `model_sha256` je externý zaznamenaný identifikátor konkrétnych váh učiteľa. Import kontroluje `responses_sha256` proti presným bajtom JSONL a uloží pôvod do pripravenej sady. Preflight reálneho tréningu vyžaduje aktuálne verzie všetkých troch vyhradených benchmarkových sád. Pri novom benchmarku znova pripravte dátové splity s aktuálnymi súbormi.
 
 ```powershell
-uv run --locked --offline python -m scripts.prepare_training --input teacher-approved.jsonl --teacher-manifest teacher.json --holdout benchmarks/slovak-starter.jsonl --holdout benchmarks/slovak-family-law.jsonl --output .tm-law/distillation
+uv run --locked --offline python -m scripts.prepare_training --input teacher-approved.jsonl --teacher-manifest teacher.json --holdout benchmarks/slovak-starter.jsonl --holdout benchmarks/slovak-family-law.jsonl --holdout benchmarks/slovak-cloud-law.jsonl --output .tm-law/distillation
 ```
 
 Ako `data_directory` pre študenta použite výstup tohto príkazu. Tréning LoRA alebo QLoRA potom používa schválené odpovede ako ciele. Ide o destiláciu z textových odpovedí. Skript nepoužíva logity učiteľa, nevykonáva inferenciu a nehodnotí právnu správnosť.

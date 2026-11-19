@@ -1,7 +1,22 @@
 from datetime import date
 
 from tm_law.schemas import LegalVersion
-from tm_law.store import SECTION_PATTERN, Store
+from tm_law.store import SECTION_PATTERN, Store, separated_references
+
+
+def test_semicolon_paragraph_continues_the_immediately_preceding_section():
+    assert separated_references("71/1967 § 54 ods. 1; ods. 2; odsek 3") == [
+        "71/1967 § 54 ods. 1",
+        "71/1967 § 54 ods. 2",
+        "71/1967 § 54 odsek 3",
+    ]
+    assert separated_references("36/2005 § 6; 71/1967 § 54 ods. 1; ods. 2") == [
+        "36/2005 § 6",
+        "71/1967 § 54 ods. 1",
+        "71/1967 § 54 ods. 2",
+    ]
+    assert separated_references("71/1967; ods. 2") is None
+    assert separated_references("71/1967 § 54 ods. 1; ods. 2 je nejasný") is None
 
 
 def version(version_id, number, year, start, end, passages):

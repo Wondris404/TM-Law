@@ -73,11 +73,13 @@ def question_key(text: str) -> str:
 def deterministic_checks(case: BenchmarkCase, result: dict) -> dict:
     expected = set(case.expected_sources)
     retrieved = set(result["retrieved_ids"])
+    context = set(result["context_ids"])
     verified = set(result["verified_ids"])
     cited = set(result["cited_ids"])
     historical = case.category == "historické znenia" and case.as_of is not None
     return {
         "retrieval_covers_expected": expected <= retrieved if expected else None,
+        "context_covers_expected": expected <= context if expected else None,
         "expected_ids_verified": expected <= verified if expected else None,
         "forbidden_ids_absent": not cited.intersection(case.forbidden_sources)
         if case.forbidden_sources
