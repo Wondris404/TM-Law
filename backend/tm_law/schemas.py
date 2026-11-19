@@ -51,7 +51,8 @@ class LegalVersion(StrictModel):
     reuse_terms: Short
     fictional: bool = False
     original_sha256: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")] | None = None
-    passages: Annotated[list[Passage], Field(min_length=1, max_length=500)]
+    # One pinned Slov-Lex wording can exceed the earlier 500-passage cap.
+    passages: Annotated[list[Passage], Field(min_length=1, max_length=800)]
 
     @model_validator(mode="after")
     def consistent_metadata(self):
