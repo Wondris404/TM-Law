@@ -46,9 +46,14 @@ CREATE TABLE IF NOT EXISTS document (
 """
 LAW_PATTERN = re.compile(r"(?<!\w)(\d{1,8})\s*/\s*(\d{4})(?!\w)")
 SCHEMA_VERSION = 2
+# A lone lowercase "v" is the preposition unless the citation uses an explicit dot.
+_ROMAN_ARTICLE = r"(?=[ivxlcdm])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})"
 SECTION_PATTERN = re.compile(
-    r"§\s*(?P<section>\d+[a-z]?)"
-    r"|\b(?:článok|clanok|čl|cl)\.?\s*(?P<article>\d+[a-z]?|[ivxlcdm]+)",
+    r"§\s*(?P<section>\d+[a-z]?)(?!\w)"
+    r"|\b(?:článok|clanok|čl|cl)\b(?P<dot>\.)?"
+    r"(?(dot)\s*|\s+)"
+    r"(?(dot)|(?!(?-i:v\b)))"
+    rf"(?P<article>\d+[a-z]?|{_ROMAN_ARTICLE})(?!\w)",
     re.IGNORECASE,
 )
 PARAGRAPH_PATTERN = re.compile(r"\b(?:ods|odsek)\.?\s*(\d+[a-z]?)", re.IGNORECASE)

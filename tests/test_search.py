@@ -1,7 +1,7 @@
 from datetime import date
 
 from tm_law.schemas import LegalVersion
-from tm_law.store import Store
+from tm_law.store import SECTION_PATTERN, Store
 
 
 def version(version_id, number, year, start, end, passages):
@@ -115,3 +115,54 @@ def test_article_word_matches_stored_abbreviation(tmp_path):
         assert [hit["citation_id"] for hit in hits] == ["article/a1"]
     both = store.search("9999/2099 Článok 1; Článok 2", as_of=day, limit=2)
     assert [hit["citation_id"] for hit in both] == ["article/a1", "article/a2"]
+
+
+def test_ordinary_words_are_not_parsed_as_articles():
+    prose = (
+        "článok civilného procesného práva",
+        "clima",
+        "článok v znení predpisu",
+    )
+    assert [SECTION_PATTERN.search(text) for text in prose] == [None, None, None]
+
+
+def test_article_boundaries_keep_ordinary_text_on_full_text_search(tmp_path):
+    store = Store(tmp_path)
+    store.initialize()
+    store.import_version(
+        version(
+            "bounds",
+            9999,
+            2099,
+            date(2024, 1, 1),
+            date(2025, 1, 1),
+            [
+                {
+                    "source_id": "prose",
+                    "section": "cl-1",
+                    "text": "článok civilného procesného práva ostáva v znení predpisu.",
+                },
+                {"source_id": "roman", "section": "cl-iv", "text": "Výslovný rímsky odkaz IV."},
+                {"source_id": "five", "section": "cl-v", "text": "Výslovný rímsky odkaz V."},
+                {"source_id": "word", "section": "9", "text": "Slovo clima nie je odkaz."},
+            ],
+        )
+    )
+    day = date(2024, 6, 1)
+    civil = store.search("článok civilného procesného práva", as_of=day)
+    assert [hit["citation_id"] for hit in civil] == ["bounds/prose"]
+    clima = store.search("clima", as_of=day)
+    assert [hit["citation_id"] for hit in clima] == ["bounds/word"]
+    sentence = store.search("článok v znení predpisu", as_of=day)
+    assert [hit["citation_id"] for hit in sentence] == ["bounds/prose"]
+    explicit = {
+        "9999/2099 Čl. IV": "bounds/roman",
+        "9999/2099 Článok 1": "bounds/prose",
+        "9999/2099 clanok 1": "bounds/prose",
+        "9999/2099 Článok V": "bounds/five",
+        "9999/2099 Čl. v": "bounds/five",
+    }
+    for query, citation in explicit.items():
+        assert [hit["citation_id"] for hit in store.search(query, as_of=day)] == [citation]
+    combined = store.search("9999/2099 Čl. IV; Článok 1", as_of=day, limit=2)
+    assert [hit["citation_id"] for hit in combined] == ["bounds/roman", "bounds/prose"]
