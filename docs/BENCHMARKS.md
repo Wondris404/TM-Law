@@ -29,7 +29,7 @@ uv run --locked python -m scripts.benchmark --model qwen3.5:4b --context-window 
 
 `--num-threads` je celé číslo od 1 do 256. Report ho zapíše do `settings.cpu_threads`. Vynechanie voľby znamená `null` a doterajšie správanie. Rovnaký limit pre bežnú aplikáciu nastaví premenná `TM_LAW_OLLAMA_NUM_THREADS`. Samotný benchmark túto premennú nečíta. Explicitná hodnota v požiadavke má prednosť pred premennou. Neplatná premenná zastaví otázku ešte pred volaním Ollamy.
 
-Každá pasáž v zadaní pre model obsahuje krátku citačnú značku `[S1]`, `[S2]` a podobne. Platí iba v rámci danej odpovede. Server ju preloží na stabilný identifikátor skutočne vloženej pasáže. Prijíma aj úplné identifikátory v jednoduchých a dvojitých hranatých zátvorkách, keď patria do kontextu danej odpovede. Pri porovnaní behov používajte stabilné identifikátory z reportu.
+Každá pasáž v zadaní pre model obsahuje krátku citačnú značku `[S1]`, `[S2]` a podobne. Rovnaká značka je aj na konci úryvku v prompte. Citačná karta zobrazuje pôvodný úryvok. Značka platí iba v rámci danej odpovede a server ju preloží na stabilný identifikátor skutočne vloženej pasáže. Prijíma aj úplné identifikátory v jednoduchých a dvojitých hranatých zátvorkách, keď patria do kontextu danej odpovede. Pri porovnaní behov používajte stabilné identifikátory z reportu.
 
 `--mmap` alebo `--no-mmap` explicitne nastaví Ollame mapovanie súboru váh. Bez voľby rozhoduje runtime. Benchmark zapíše hodnotu do `settings.ollama_use_mmap`. Merajte vplyv pri rovnakom modeli, korpuse a otázke. Pamäť mapovaná zo súboru môže byť súčasťou PSS aj súborovej cache. [Cloudové meranie](CLOUD_BENCHMARK_2026-11-19.md)
 

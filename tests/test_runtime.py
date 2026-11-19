@@ -388,7 +388,23 @@ def test_api_thread_env_and_rag_marker_keep_strict_citations(tmp_path, monkeypat
         assert "nepridávaj pred identifikátor žiadny prefix" in SYSTEM
         assert any(source["id"] == "demo-2022/p7-1" for source in user["sources"])
         assert [source["marker"] for source in user["sources"]] == ["[S1]", "[S2]"]
+        assert user["sources"][0]["text"] == (
+            "Evidencia dielne sa uchováva dva roky.\nZnačka: [S1]"
+        )
+        assert user["sources"][1]["text"].endswith("\nZnačka: [S2]")
+        assert done["citations"][0]["text"] == "Evidencia dielne sa uchováva dva roky."
+        assert done["citations"][0]["context_truncated"] is False
         assert "num_thread" not in payloads[-1]["options"]
+
+        empty = client.post(
+            "/api/chat",
+            json={"question": "Otázka bez právneho podkladu.", "query": "zzzqq"},
+        )
+        assert empty.status_code == 200
+        sent = payloads[-1]["messages"]
+        assert json.loads(sent[-1]["content"])["sources"] == []
+        assert "Značka:" not in json.dumps(sent, ensure_ascii=False)
+        assert "[S1]" not in json.dumps(sent, ensure_ascii=False)
 
         monkeypatch.setenv("TM_LAW_OLLAMA_NUM_THREADS", "2")
         client.post("/api/chat", json=question)
@@ -419,6 +435,44 @@ def test_api_thread_env_and_rag_marker_keep_strict_citations(tmp_path, monkeypat
     )
     assert copied == "[1] [1] [1] [1] [neoverený odkaz] [neoverený odkaz]"
     assert valid == sources and rejected == ["S2", "[1]"]
+
+
+def test_passage_marker_is_charged_to_the_context_budget(tmp_path):
+    payloads = []
+
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "qwen3.5:4b"}]})
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, text='{"message":{"content":"Úsek [S1]."},"done":true}\n')
+
+    runtime = Ollama("http://127.0.0.1:11434", "qwen3.5:4b", httpx.MockTransport(handler))
+    version = legal_fixture(2022)
+    version["version_id"] = "budget-marker"
+    version["fictional"] = False
+    version["source_url"] = "https://example.com/budget-marker"
+    passage = "A" * 2000
+    version["passages"] = [version["passages"][0] | {"source_id": "only", "text": passage}]
+    question = "Rozpočet"
+    request = {
+        "question": question,
+        "query": "9999/2099 § 7",
+        "options": {"context_window": 2048, "max_tokens": 1024},
+    }
+    with TestClient(create_app(tmp_path, runtime), base_url="http://127.0.0.1") as client:
+        assert client.post("/api/legal/import", json=version).status_code == 201
+        done = json.loads(client.post("/api/chat", json=request).text.splitlines()[-1])
+
+    sent = json.loads(payloads[-1]["messages"][-1]["content"])["sources"][0]
+    label = "\nZnačka: [S1]"
+    budget = (2048 - 1024 - 650) * 2 - len(question)
+    body = sent["text"].removesuffix(label)
+    assert sent["marker"] == "[S1]"
+    assert sent["text"].endswith(label)
+    assert body == passage[: len(body)]
+    assert len(body) == min(1300, budget - 300 - len(label))
+    assert done["citations"][0]["text"] == body
+    assert "Značka:" not in done["citations"][0]["text"]
 
 
 @pytest.mark.asyncio

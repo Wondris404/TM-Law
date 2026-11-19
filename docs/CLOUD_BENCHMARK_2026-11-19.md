@@ -41,6 +41,12 @@ Starší výstup Qwen2.5 0.5B obsahoval presný identifikátor ústavného odsek
 
 Oba modely dostali všetky štyri očakávané pasáže do kontextu. V tomto behu modely nevytvorili žiadnu značku, ktorú by validátor prijal alebo odmietol. Úlohy mimo pokrytia zostali bez zdrojov. Na zaslepené hodnotenie sa pripravilo 15 odpovedí, po päť od každého modelu. Požadované právne posudky ostávajú nevyplnené.
 
+## Značka priamo pri pasáži
+
+Po pripojení značky k textu pasáže dokončil Qwen2.5 1.5B všetkých päť úloh. Citoval **3 zo 4** očakávaných pasáží, oproti **0 zo 4** v predchádzajúcom behu. Oba behy mali rovnaký modelový digest, korpus, otázky, identifikátory v kontexte a parametre generovania. V novom behu bolo vypnuté meranie PSS. Pozorovaný medián bol 23,66 s a 17,49 tok/s.
+
+Pri odvolaní model citoval oba odseky a pri otcovstve jeden očakávaný odsek. Ústavnú pasáž vynechal a odpoveď dosiahla limit 160 tokenov. Pri dvoch otázkach bez podkladov validátor nezachytil žiadne značky. V jednej z týchto odpovedí sa model odvolával na dokumenty, ktoré nemal v kontexte. Výsledok vychádza z jedného prechodu sadou a meria identifikátory citácií.
+
 ## Pamäť a nastavenie mapovania
 
 Kontrolné meranie zopakovalo prvú otázku výhradne s Qwen2.5 1.5B. Pri `--mmap` bolo spoločné PSS 1 811 MiB a latencia 25,20 s. Pri `--no-mmap` bolo približne 1 211 MiB a latencia 25,40 s. Odpoveď bola rovnaká. Ide o jedno meranie na režim. Ďalší beh použil vypnuté mapovanie.
@@ -66,6 +72,6 @@ Preflight reálneho LoRA alebo QLoRA vyžaduje aktuálnu cloudovú sadu ako tret
 
 ## Projektové kontroly
 
-Prešli Ruff lint a kontrola formátovania, 69 bežných testov Pythonu, TypeScript, produkčný build a štyri testy histórie frontendu. Kontrola Windows CIM sa na Linuxe preskočila. Prešiel aj mock benchmark 3/3, syntetický import, audit ôsmich referencií zákona o rodine, všetkých 14 vyhľadávacích prípadov z dvoch právnych sád a príprava dát s tromi holdoutmi. Bežiaci FastAPI server sprístupnil produkčný frontend a mock chat vložil oba požadované odseky do kontextu.
+Prešli Ruff lint a kontrola formátovania, TypeScript, produkčný build a štyri testy histórie frontendu. Po pripojení značky k pasáži a zapracovaní aktuálneho `main` prešlo 72 testov Pythonu. Kontrola Windows CIM sa na Linuxe preskočila. Prešiel aj mock benchmark 3/3, syntetický import, audit ôsmich referencií zákona o rodine, všetkých 14 vyhľadávacích prípadov z dvoch právnych sád a príprava dát s tromi holdoutmi. Bežiaci FastAPI server sprístupnil produkčný frontend a mock chat vložil oba požadované odseky do kontextu.
 
 Samostatný opt-in test Ollamy najprv dosiahol 45-sekundový limit. Ollama zvolila 16 vlákien pri afinite na jedno jadro. Test po oprave explicitne použil jedno inferenčné vlákno, prešiel za 2,30 s a uvoľnil model po odpovedi.

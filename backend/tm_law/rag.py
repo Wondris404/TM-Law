@@ -187,16 +187,21 @@ async def _answer(
     excerpt = document_excerpt(document["text"], query, budget // 2) if document else None
     evidence = []
     used_sources = []
+    passage_texts = []
     aliases = {}
     budget -= len(excerpt or "")
     eligible_sources = [source for source in sources if source["norm_status"] != "repealed"]
     if len(eligible_sources) != len(sources):
         notes.append("Zrušené ustanovenia boli vynechané z podkladov pre model.")
     for source in eligible_sources:
-        if budget < 350:
-            break
-        body = source["text"][: min(1300, budget - 300)]
         alias = f"S{len(evidence) + 1}"
+        label = f"Značka: [{alias}]"
+        marker_cost = len(label) + 1
+        if budget < 350 + marker_cost:
+            break
+        body = source["text"][: min(1300, budget - 300 - marker_cost)]
+        if not body:
+            break
         aliases[alias] = source["citation_id"]
         evidence.append(
             {
@@ -208,11 +213,12 @@ async def _answer(
                 "until": source["effective_until"],
                 "fictional": source["fictional"],
                 "norm_status": source["norm_status"],
-                "text": body,
+                "text": f"{body}\n{label}",
             }
         )
+        passage_texts.append(body)
         used_sources.append(source)
-        budget -= len(body) + 300
+        budget -= len(body) + marker_cost + 300
     if eligible_sources and not used_sources:
         notes.append("Zvolený kontext neumožnil vložiť nájdené úseky do zadania pre model.")
     conflicts = conflicting_versions(used_sources)
@@ -300,8 +306,8 @@ async def _answer(
         }
         return
     citation_context = [
-        {**source, "text": item["text"], "context_truncated": item["text"] != source["text"]}
-        for source, item in zip(used_sources, evidence, strict=True)
+        {**source, "text": body, "context_truncated": body != source["text"]}
+        for source, body in zip(used_sources, passage_texts, strict=True)
     ]
     text, citations, rejected = validate_citations("".join(chunks), citation_context, aliases)
     unsupported = unmarked_legal_mentions(text)
