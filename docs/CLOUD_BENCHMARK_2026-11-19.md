@@ -66,4 +66,6 @@ Preflight reálneho LoRA alebo QLoRA vyžaduje aktuálnu cloudovú sadu ako tret
 
 ## Projektové kontroly
 
-Prešli Ruff lint a kontrola formátovania, 69 testov Pythonu, TypeScript, produkčný build a štyri testy histórie frontendu. Dve podmienené kontroly základnej sady pytest boli preskočené. Ide o Windows CIM a opt-in test Ollamy. Prešiel aj mock benchmark 3/3, syntetický import, audit ôsmich referencií zákona o rodine, všetkých 14 vyhľadávacích prípadov z dvoch právnych sád a príprava dát s tromi holdoutmi. Bežiaci FastAPI server sprístupnil produkčný frontend a mock chat vložil oba požadované odseky do kontextu.
+Prešli Ruff lint a kontrola formátovania, 69 bežných testov Pythonu, TypeScript, produkčný build a štyri testy histórie frontendu. Kontrola Windows CIM sa na Linuxe preskočila. Prešiel aj mock benchmark 3/3, syntetický import, audit ôsmich referencií zákona o rodine, všetkých 14 vyhľadávacích prípadov z dvoch právnych sád a príprava dát s tromi holdoutmi. Bežiaci FastAPI server sprístupnil produkčný frontend a mock chat vložil oba požadované odseky do kontextu.
+
+Samostatný opt-in test Ollamy najprv dosiahol 45-sekundový limit. Ollama zvolila 16 vlákien pri afinite na jedno jadro. Test po oprave explicitne použil jedno inferenčné vlákno, prešiel za 2,30 s a uvoľnil model po odpovedi.

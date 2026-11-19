@@ -94,12 +94,12 @@ async def test_real_local_ollama():
     model = os.getenv("TM_LAW_TEST_OLLAMA_MODEL")
     if not model:
         pytest.skip("TM_LAW_TEST_OLLAMA_MODEL is unset")
-    runtime = Ollama(os.getenv("TM_LAW_OLLAMA_URL", "http://127.0.0.1:11434"), model)
+    runtime = Ollama(os.getenv("TM_LAW_OLLAMA_URL", "http://127.0.0.1:11434"), model, keep_alive=0)
     chunks = [
         item
         async for item in runtime.stream(
             [{"role": "user", "content": "Odpovedz jedným slovom: Koľko je 2 + 2?"}],
-            RuntimeOptions(context_window=2048, max_tokens=64),
+            RuntimeOptions(context_window=2048, max_tokens=64, cpu_threads=1),
         )
     ]
     assert "".join(item.text for item in chunks).strip()
