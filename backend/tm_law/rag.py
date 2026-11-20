@@ -211,7 +211,21 @@ async def _answer(
             "code": "invalid_decisive_date",
         }
         return
-    sources = store.search(query, as_of=as_of, limit=8, include_fictional=runtime.simulated)
+    source_limit = 8
+    sources = store.search(
+        query, as_of=as_of, limit=source_limit, include_fictional=runtime.simulated
+    )
+    eligible_sources = [source for source in sources if source["norm_status"] != "repealed"]
+    found_repealed = len(eligible_sources) != len(sources)
+    if found_repealed and len(sources) == source_limit:
+        eligible_sources = store.search(
+            query,
+            as_of=as_of,
+            limit=source_limit,
+            include_fictional=runtime.simulated,
+            include_repealed=False,
+        )
+    retrieved = {source["citation_id"]: source for source in [*sources, *eligible_sources]}
     if not sources:
         notes.append(
             "Pre zadaný dátum a hľadaný výraz sa v lokálnej databáze nenašlo doložené znenie."
@@ -224,9 +238,11 @@ async def _answer(
         )
     else:
         notes.append("Bez rozhodujúceho dátumu môže vyhľadávanie zahŕňať viaceré znenia.")
-    if any(not source["fictional"] and not source["original_archived"] for source in sources):
+    if any(
+        not source["fictional"] and not source["original_archived"] for source in retrieved.values()
+    ):
         notes.append("Časť zdrojov má iba importované metadáta. Overte pôvodný dokument.")
-    if any(source["fictional"] for source in sources):
+    if any(source["fictional"] for source in retrieved.values()):
         notes.append("Výsledky zahŕňajú výslovne fiktívne testovacie zdroje.")
 
     budget = max(650, (request.options.context_window - request.options.max_tokens - 650) * 2)
@@ -243,8 +259,7 @@ async def _answer(
     aliases = {}
     source_markers = False
     budget -= len(excerpt or "")
-    eligible_sources = [source for source in sources if source["norm_status"] != "repealed"]
-    if len(eligible_sources) != len(sources):
+    if found_repealed:
         notes.append("Zrušené ustanovenia boli vynechané z podkladov pre model.")
     for source in eligible_sources:
         alias = f"S{len(evidence) + 1}"
@@ -390,7 +405,7 @@ async def _answer(
         "citations": citations,
         "rejected": rejected,
         "unsupported_mentions": unsupported,
-        "retrieved_ids": [source["citation_id"] for source in sources],
+        "retrieved_ids": list(retrieved),
         "context_ids": [source["citation_id"] for source in used_sources],
         "cited_ids": verified_ids + rejected,
         "verified_ids": verified_ids,

@@ -136,6 +136,32 @@ def test_chat_citations_only_show_context_and_exclude_repealed_passages(client):
     assert any("Zrušené ustanovenia" in note for note in repealed["notes"])
 
 
+def test_repealed_passages_do_not_crowd_out_chat_evidence(client):
+    version = fixture(2024)
+    version.update(version_id="demo-mixed-status", law_number=9997)
+    version["passages"] = [
+        {
+            "source_id": f"old-{index}",
+            "section": "42",
+            "text": "Zrušený podklad.",
+            "norm_status": "repealed",
+        }
+        for index in range(8)
+    ] + [{"source_id": "current", "section": "42", "text": "Dostupný podklad."}]
+    assert client.post("/api/legal/import", json=version).status_code == 201
+
+    response = client.post(
+        "/api/chat",
+        json={"question": "Ktorý podklad sa zachoval?", "query": "9997/2099 § 42"},
+    )
+    result = json.loads(response.text.splitlines()[-1])
+    current = "demo-mixed-status/current"
+    assert result["evidence_status"] == "available"
+    assert result["context_ids"] == result["verified_ids"] == [current]
+    assert current in result["retrieved_ids"]
+    assert any("Zrušené ustanovenia" in note for note in result["notes"])
+
+
 def test_document_upload_query_deletion_and_isolation(client, tmp_path):
     response = client.post("/api/documents", files={"file": ("../../moje.txt", b"Tajny spis")})
     assert response.status_code == 201 and response.json()["name"] == "moje.txt"
