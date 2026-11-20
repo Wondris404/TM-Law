@@ -273,6 +273,7 @@ class Store:
         as_of: date | None = None,
         limit=10,
         include_fictional=True,
+        include_repealed: bool = True,
     ) -> list[dict]:
         references = separated_references(query)
         if references:
@@ -284,6 +285,7 @@ class Store:
                     as_of=as_of,
                     limit=limit,
                     include_fictional=include_fictional,
+                    include_repealed=include_repealed,
                 )
                 for reference in references
             ]
@@ -340,6 +342,8 @@ class Store:
             params.append(case_number.strip())
         if not include_fictional:
             filters.append("json_extract(v.metadata, '$.fictional')=0")
+        if not include_repealed:
+            filters.append("p.norm_status IS NOT 'repealed'")
         if as_of:
             day = as_of.isoformat()
             filters.append(
@@ -366,6 +370,7 @@ class Store:
                 as_of=as_of,
                 limit=limit,
                 include_fictional=include_fictional,
+                include_repealed=include_repealed,
             )
         return [
             {
